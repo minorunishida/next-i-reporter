@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<conmas>
+  <top>
+    <defTopName></defTopName>
+    <sheetCount>2</sheetCount>
+    <backgroundImage></backgroundImage>
+    <sheets>
+      <sheet>
+        <defSheetName>BrokenSheet</defSheetName>
+        <sheetNo>1</sheetNo>
+        <width></width>
+        <height>700</height>
+        <clusters>
+          <cluster>
+            <sheetNo>2</sheetNo>
+            <clusterId>0</clusterId>
+            <name></name>
+            <type>BrokenType</type>
+            <top>-0.10</top>
+            <bottom>1.20</bottom>
+            <left>0.90</left>
+            <right>0.40</right>
+            <cellAddress></cellAddress>
+          </cluster>
+        </clusters>
+      </sheet>
+    </sheets>
+  </top>
+</conmas>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<conmas>
+  <top>
+    <defTopName>検証サンプル</defTopName>
+    <sheetCount>1</sheetCount>
+    <backgroundImage>QUJDRA==</backgroundImage>
+    <sheets>
+      <sheet>
+        <defSheetName>Sheet1</defSheetName>
+        <sheetNo>1</sheetNo>
+        <width>1200</width>
+        <height>800</height>
+        <clusters>
+          <cluster>
+            <sheetNo>1</sheetNo>
+            <clusterId>0</clusterId>
+            <name>タイトル</name>
+            <type>FixedText</type>
+            <top>0.10</top>
+            <bottom>0.18</bottom>
+            <left>0.08</left>
+            <right>0.40</right>
+            <cellAddress>A1</cellAddress>
+          </cluster>
+          <cluster>
+            <sheetNo>1</sheetNo>
+            <clusterId>1</clusterId>
+            <name>担当者</name>
+            <type>KeyboardText</type>
+            <top>0.22</top>
+            <bottom>0.30</bottom>
+            <left>0.45</left>
+            <right>0.82</right>
+            <cellAddress>B2</cellAddress>
+          </cluster>
+        </clusters>
+      </sheet>
+    </sheets>
+  </top>
+</conmas>

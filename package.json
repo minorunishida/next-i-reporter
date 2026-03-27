@@ -1,17 +1,25 @@
 {
   "name": "next-i-reporter",
+  "type": "module",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "cli": "node --experimental-strip-types src/cli/index.ts",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:cli": "node --experimental-strip-types --test src/lib/template-inspector.test.ts src/lib/xml-validator.test.ts src/lib/template-diff.test.ts"
   },
   "dependencies": {
+    "@azure/identity": "^4.13.1",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "isomorphic-fetch": "^3.0.0",
     "next": "16.2.1",
+    "openai": "^6.33.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
