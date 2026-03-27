@@ -6,7 +6,7 @@ import { mapClusterRegionToPdf } from "./print-coord-mapper";
  * シート数に応じた白いPDFを動的生成 (Base64)。
  * Designer は sheetCount とPDFページ数が一致することを期待する。
  */
-function generateBlankPdfBase64(pageCount: number): string {
+export function generateBlankPdfBase64(pageCount: number): string {
   const W = "595.28";
   const H = "841.89";
   const stream = `1 1 1 rg\n0 0 ${W} ${H} re f\n`;
@@ -435,12 +435,12 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
   return L;
 }
 
-function esc(s: string): string {
+export function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
-function toFW(n: number): string {
+export function toFW(n: number): string {
   const fw = "０１２３４５６７８９";
   return String(n).split("").map((d) => fw[parseInt(d)] ?? d).join("");
 }

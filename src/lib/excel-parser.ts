@@ -188,7 +188,7 @@ const INCH_TO_MM = 25.4;
 /** デフォルトマージン (mm) — Excel のデフォルト値に合わせる */
 const DEFAULT_MARGINS = { top: 19.1, bottom: 19.1, left: 17.8, right: 17.8 };
 
-function extractPageSetup(ws: XLSX.WorkSheet): PageSetup {
+export function extractPageSetup(ws: XLSX.WorkSheet): PageSetup {
   const wsAny = ws as Record<string, unknown>;
 
   // orientation: SheetJS の !pageSetup.orientation ("portrait" | "landscape")
@@ -226,7 +226,7 @@ function extractPageSetup(ws: XLSX.WorkSheet): PageSetup {
 
 // --- ヘルパー ---
 
-function cumulativeSum(arr: number[]): number[] {
+export function cumulativeSum(arr: number[]): number[] {
   const result = [0];
   for (let i = 0; i < arr.length; i++) {
     result.push(result[i] + arr[i]);
@@ -241,7 +241,7 @@ type MergeInfo = {
   endCol: number;
 };
 
-function buildMergeMap(
+export function buildMergeMap(
   merges: XLSX.Range[]
 ): Map<string, MergeInfo> {
   const map = new Map<string, MergeInfo>();
@@ -261,13 +261,13 @@ function buildMergeMap(
   return map;
 }
 
-function getCellValue(cell: XLSX.CellObject): string {
+export function getCellValue(cell: XLSX.CellObject): string {
   if (cell.w) return cell.w; // formatted text
   if (cell.v !== undefined && cell.v !== null) return String(cell.v);
   return "";
 }
 
-function extractStyle(cell: XLSX.CellObject | undefined): CellStyle {
+export function extractStyle(cell: XLSX.CellObject | undefined): CellStyle {
   if (!cell?.s) return {};
   const s = cell.s as Record<string, unknown>;
   const style: CellStyle = {};

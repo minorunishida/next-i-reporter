@@ -14,6 +14,10 @@ export type PdfRect = {
   right: number;
 };
 
+/**
+ * シートの印刷範囲を px 座標で計算する。
+ * printMeta.printArea が未定義の場合は usedRange にフォールバック。
+ */
 export function computePrintAreaPx(
   sheet: SheetStructure,
   printMeta: PrintMeta
@@ -30,6 +34,11 @@ export function computePrintAreaPx(
   return { left, top, width: right - left, height: bottom - top };
 }
 
+/**
+ * PDF ページ上のコンテンツ描画領域を計算する。
+ * zoom / fitToPage / デフォルトの3パターンでスケールを決定。
+ * @returns left/top (pt), width/height (pt), scale
+ */
 export function computePdfContentArea(printMeta: PrintMeta): {
   left: number;
   top: number;
@@ -74,9 +83,9 @@ export function computePdfContentArea(printMeta: PrintMeta): {
  * 行/列の境界位置を (px, pt) のペアとして登録し、
  * 任意の px 値を線形補間で pt に変換する。
  */
-type PxPtPair = { px: number; pt: number };
+export type PxPtPair = { px: number; pt: number };
 
-function interpolate(points: PxPtPair[], px: number): number {
+export function interpolate(points: PxPtPair[], px: number): number {
   if (points.length === 0) return px;
   if (points.length === 1) return points[0].pt;
 
@@ -103,7 +112,7 @@ function interpolate(points: PxPtPair[], px: number): number {
   return a.pt + t * (b.pt - a.pt);
 }
 
-function safeDivide(num: number, den: number, fallback: number): number {
+export function safeDivide(num: number, den: number, fallback: number): number {
   return den !== 0 ? num / den : fallback;
 }
 
@@ -207,14 +216,14 @@ export function mapClusterRegionToPdf(
 /**
  * px 累積配列の範囲外のインデックスに対して、最後の要素幅で外挿
  */
-function extrapolatePx(cumulative: number[], idx: number): number {
+export function extrapolatePx(cumulative: number[], idx: number): number {
   if (cumulative.length < 2) return idx * 64; // 完全フォールバック
   const lastIdx = cumulative.length - 1;
   const lastWidth = cumulative[lastIdx] - cumulative[lastIdx - 1];
   return cumulative[lastIdx] + lastWidth * (idx - lastIdx);
 }
 
-function cumulativeSum(arr: number[]): number[] {
+export function cumulativeSum(arr: number[]): number[] {
   const result = [0];
   for (let i = 0; i < arr.length; i++) {
     result.push(result[i] + arr[i]);

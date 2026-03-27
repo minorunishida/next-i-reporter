@@ -135,26 +135,27 @@ export const CLUSTER_TYPES = {
 
 export type ClusterTypeName = keyof typeof CLUSTER_TYPES;
 
+/** AI が推測したクラスター（帳票上の入力項目）の定義 */
 export type ClusterDefinition = {
   id: string;
   name: string;
-  type: number;
+  type: number;                 // CLUSTER_TYPES の数値コード
   typeName: ClusterTypeName;
-  sheetNo: number;
-  cellAddress: string;
-  region: {
+  sheetNo: number;              // 0-based シートインデックス
+  cellAddress: string;          // "C5" 形式
+  region: {                     // px 座標（excel-parser で計算）
     top: number;
     bottom: number;
     left: number;
     right: number;
   };
-  confidence: number; // 0-1
+  confidence: number;           // 0-1 の推測自信度
   value?: string;
   displayValue?: string;
   readOnly: boolean;
-  inputParameters: string; // "key1=value1;key2=value2" 形式
+  inputParameters: string;      // "key1=value1;key2=value2" 形式
   excelOutputValue?: string;
-  formula?: string;
+  formula?: string;             // Excel 数式（Calculate 型の場合）
 };
 
 export type AnalysisResult = {

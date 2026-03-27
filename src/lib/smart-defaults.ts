@@ -142,7 +142,7 @@ const defaultsByType = new Map<number, TypeDefaults>(
  * パラメータが「詳細に設定済み」かどうかを判定する。
  * セミコロン区切りのキーが3つ以上あれば「十分」とみなす。
  */
-function hasDetailedParameters(params: string): boolean {
+export function hasDetailedParameters(params: string): boolean {
   if (!params || params.trim() === "") return false;
   const keys = params.split(";").filter((p) => p.includes("="));
   return keys.length >= 3;
@@ -151,7 +151,7 @@ function hasDetailedParameters(params: string): boolean {
 /**
  * クラスター名とタイプに基づいてスマートデフォルトのパラメータ文字列を返す
  */
-function getSmartDefault(name: string, typeCode: number): string | null {
+export function getSmartDefault(name: string, typeCode: number): string | null {
   const typeDef = defaultsByType.get(typeCode);
   if (!typeDef) return null;
 

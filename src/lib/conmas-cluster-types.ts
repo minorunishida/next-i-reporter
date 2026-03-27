@@ -1,4 +1,5 @@
 export const TYPE_NUM_TO_STRING: Record<number, string> = {
+  5: "FixedText",
   10: "FreeText",
   15: "FreeDraw",
   30: "KeyboardText",
