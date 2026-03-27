@@ -1,5 +1,5 @@
 /**
- * Smart Defaults: クラスタ名と型に基づいてインテリジェントな inputParameters を生成する
+ * Smart Defaults: クラスター名と型に基づいてインテリジェントな inputParameters を生成する
  *
  * AI 解析後に適用し、パラメータが空または不十分な場合にデフォルト値で補完する。
  * AI が既に詳細なパラメータを提供している場合はそのまま維持する。
@@ -149,7 +149,7 @@ function hasDetailedParameters(params: string): boolean {
 }
 
 /**
- * クラスタ名とタイプに基づいてスマートデフォルトのパラメータ文字列を返す
+ * クラスター名とタイプに基づいてスマートデフォルトのパラメータ文字列を返す
  */
 function getSmartDefault(name: string, typeCode: number): string | null {
   const typeDef = defaultsByType.get(typeCode);
@@ -166,9 +166,9 @@ function getSmartDefault(name: string, typeCode: number): string | null {
 }
 
 /**
- * クラスタ配列にスマートデフォルトを適用する。
+ * クラスター配列にスマートデフォルトを適用する。
  *
- * - inputParameters が空または不十分なクラスタにはデフォルトを設定
+ * - inputParameters が空または不十分なクラスターにはデフォルトを設定
  * - AI が既に詳細なパラメータを提供している場合はそのまま維持
  */
 export function applySmartDefaults(

@@ -1,13 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --accent: #3b82f6;
-  --accent-dark: #2563eb;
-  --accent-light: #dbeafe;
+  --background: #f9fafb;
+  --foreground: #111827;
+  --accent: #4f46e5;
+  --accent-dark: #4338ca;
+  --accent-light: #eef2ff;
   --surface: #ffffff;
-  --border: #e2e8f0;
+  --border: #e5e7eb;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
 }
 
 @theme inline {
@@ -18,10 +20,12 @@
 }
 
 body {
-  background: linear-gradient(135deg, #f0f4ff 0%, #f8fafc 40%, #faf5ff 100%);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Smooth transitions for interactive elements */
@@ -29,21 +33,20 @@ button, a, input, label {
   transition: all 0.2s ease;
 }
 
-/* Custom scrollbar for preview areas */
+/* Custom scrollbar — minimal style */
 .overflow-auto::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 .overflow-auto::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 3px;
+  background: transparent;
 }
 .overflow-auto::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
+  background: #d1d5db;
+  border-radius: 9999px;
 }
 .overflow-auto::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #9ca3af;
 }
 
 /* Fade-in animation */
@@ -62,10 +65,26 @@ button, a, input, label {
   animation: fadeInUp 0.4s ease-out;
 }
 
+/* Slide-in animation */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
 /* Pulse glow for active step */
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.25); }
+  50% { box-shadow: 0 0 0 5px rgba(79, 70, 229, 0); }
 }
 
 .animate-pulse-glow {

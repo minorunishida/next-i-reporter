@@ -59,7 +59,7 @@ export default function ClusterToolbar({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-sm font-semibold text-slate-800">
-              クラスタ一覧
+              クラスター一覧
             </span>
             <span className="text-xs text-slate-400">
               {clusters.length} 件

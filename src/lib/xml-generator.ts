@@ -358,7 +358,7 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
       left = mapped.left;
       right = mapped.right;
     } else {
-      // クラスタが印刷範囲外 — レガシー正規化
+      // クラスターが印刷範囲外 — レガシー正規化
       const w = sheet.totalWidth;
       const h = sheet.totalHeight;
       top = h > 0 ? c.region.top / h : 0;

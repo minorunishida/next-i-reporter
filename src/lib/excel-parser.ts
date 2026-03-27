@@ -89,6 +89,14 @@ function parseSheet(
     }
   }
 
+  // デバッグ: SheetJS の列幅の生データ
+  console.log(`[excel-parser] Sheet "${name}" ref=${ref} rowCount=${rowCount} colCount=${colCount}`);
+  console.log(`[excel-parser] colWidths (first 10):`, colWidths.slice(0, 10).map((w, i) => {
+    const ci = ws["!cols"]?.[i];
+    return { col: i, px: w, raw: ci ? { wch: ci.wch, wpx: ci.wpx, width: ci.width } : "default" };
+  }));
+  console.log(`[excel-parser] totalWidth=${colWidths.reduce((a, b) => a + b, 0).toFixed(1)} totalHeight=${rowHeights.reduce((a, b) => a + b, 0).toFixed(1)}`);
+
   // ページ設定の抽出
   const pageSetup = extractPageSetup(ws);
 

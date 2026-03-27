@@ -80,7 +80,7 @@ export default function ClusterList({ result }: Props) {
   const { clusters, summary } = result;
 
   const summaryCards = [
-    { label: "クラスタ検出", value: summary.totalClusters, unit: "件", color: "from-slate-500 to-slate-600", bg: "bg-slate-50" },
+    { label: "クラスター検出", value: summary.totalClusters, unit: "件", color: "from-slate-500 to-slate-600", bg: "bg-slate-50" },
     { label: "高信頼", value: summary.highConfidence, unit: "", color: "from-emerald-500 to-emerald-600", bg: "bg-emerald-50" },
     { label: "要確認", value: summary.mediumConfidence, unit: "", color: "from-amber-500 to-amber-600", bg: "bg-amber-50" },
     { label: "低信頼", value: summary.lowConfidence, unit: "", color: "from-red-500 to-red-600", bg: "bg-red-50" },

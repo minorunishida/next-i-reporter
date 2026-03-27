@@ -119,7 +119,7 @@ export type FormStructure = {
   pdfBase64?: string; // Graph API で変換した背景PDF (Base64)
 };
 
-// --- クラスタ定義 (AI 推論結果) ---
+// --- クラスター定義 (AI 推論結果) ---
 
 export const CLUSTER_TYPES = {
   KeyboardText: 30,
