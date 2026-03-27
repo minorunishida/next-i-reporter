@@ -1,5 +1,6 @@
 import type { AnalysisResult, ClusterDefinition, SheetStructure } from "./form-structure";
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
+import { mapClusterRegionToPdf } from "./print-coord-mapper";
 
 /**
  * シート数に応じた白いPDFを動的生成 (Base64)。
@@ -301,7 +302,7 @@ export function generateConmasXml(result: AnalysisResult): string {
   // === sheets + clusters は top > sheets の中に入る (variables ではない) ===
   p("    <sheets>");
   for (const sheet of formStructure.sheets) {
-    const sc = clusters.filter((c) => c.sheetNo === sheet.index);
+    const sc = clusters.filter((c) => c.sheetNo === sheet.index && c.type !== 20);
     L.push(...genSheet(sheet, sc));
   }
   p("    </sheets>");
@@ -339,18 +340,42 @@ function genSheet(sheet: SheetStructure, clusters: ClusterDefinition[]): string[
   }
   p("        <references></references>");
   p("        <clusters>");
-  clusters.forEach((c, idx) => L.push(...genCluster(c, idx, sheet.totalWidth, sheet.totalHeight)));
+  clusters.forEach((c, idx) => L.push(...genCluster(c, idx, sheet)));
   p("        </clusters>");
   p("      </sheet>");
 
   return L;
 }
 
-function genCluster(c: ClusterDefinition, id: number, w: number, h: number): string[] {
-  const top = h > 0 ? c.region.top / h : 0;
-  const bottom = h > 0 ? c.region.bottom / h : 0;
-  const left = w > 0 ? c.region.left / w : 0;
-  const right = w > 0 ? c.region.right / w : 0;
+function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): string[] {
+  let top: number, bottom: number, left: number, right: number;
+
+  if (sheet.printMeta) {
+    const mapped = mapClusterRegionToPdf(c.region, sheet, sheet.printMeta);
+    if (mapped) {
+      top = mapped.top;
+      bottom = mapped.bottom;
+      left = mapped.left;
+      right = mapped.right;
+    } else {
+      // クラスタが印刷範囲外 — レガシー正規化
+      const w = sheet.totalWidth;
+      const h = sheet.totalHeight;
+      top = h > 0 ? c.region.top / h : 0;
+      bottom = h > 0 ? c.region.bottom / h : 0;
+      left = w > 0 ? c.region.left / w : 0;
+      right = w > 0 ? c.region.right / w : 0;
+    }
+  } else {
+    // printMeta なし — レガシー正規化
+    const w = sheet.totalWidth;
+    const h = sheet.totalHeight;
+    top = h > 0 ? c.region.top / h : 0;
+    bottom = h > 0 ? c.region.bottom / h : 0;
+    left = w > 0 ? c.region.left / w : 0;
+    right = w > 0 ? c.region.right / w : 0;
+  }
+
   const typeStr = TYPE_NUM_TO_STRING[c.type] ?? c.typeName ?? "FixedText";
 
   const L: string[] = [];

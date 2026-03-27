@@ -30,7 +30,11 @@ export function parseExcel(
     cellNF: true,
   });
 
-  const sheets: SheetStructure[] = workbook.SheetNames.map((name, index) => {
+  const filteredNames = workbook.SheetNames.filter(
+    (name) => name.toLowerCase() !== "exceloutputsetting"
+  );
+
+  const sheets: SheetStructure[] = filteredNames.map((name, index) => {
     const ws = workbook.Sheets[name];
     return parseSheet(ws, name, index);
   });

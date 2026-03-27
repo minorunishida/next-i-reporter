@@ -10,6 +10,7 @@ import type {
   CellInfo,
 } from "@/lib/form-structure";
 import { CLUSTER_TYPES } from "@/lib/form-structure";
+import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
 import ClusterToolbar from "./ClusterToolbar";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -23,7 +24,6 @@ type Props = {
 // ─── Type labels (Japanese) ──────────────────────────────────────────────────
 
 const TYPE_LABELS: Record<ClusterTypeName, string> = {
-  FixedText: "固定テキスト",
   KeyboardText: "テキスト入力",
   Date: "日付",
   Time: "時刻",
@@ -36,7 +36,6 @@ const TYPE_LABELS: Record<ClusterTypeName, string> = {
 };
 
 const ALL_TYPE_NAMES: ClusterTypeName[] = [
-  "FixedText",
   "KeyboardText",
   "Date",
   "Time",
@@ -86,6 +85,11 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   const [filterConfidence, setFilterConfidence] = useState<"all" | "high" | "medium" | "low">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; clusterId: string } | null>(null);
+  const [zoom, setZoom] = useState(1.0);
+
+  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(3.0, Math.round((z + 0.1) * 10) / 10)), []);
+  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10)), []);
+  const handleZoomReset = useCallback(() => setZoom(1.0), []);
 
   // --- Paper state ---
   const initialSheet = formStructure.sheets[0];
@@ -251,9 +255,31 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
             </svg>
             <span className="text-[11px] font-medium text-slate-500">ビジュアルプレビュー</span>
-            <span className="text-[10px] text-slate-400 ml-auto">
-              クリックで選択 / 右クリックでメニュー / Shift+クリックで複数選択
-            </span>
+            <div className="flex items-center gap-1 ml-auto">
+              <button
+                onClick={handleZoomOut}
+                disabled={zoom <= 0.5}
+                className="rounded-lg px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all duration-150"
+                title="ズームアウト"
+              >
+                −
+              </button>
+              <button
+                onClick={handleZoomReset}
+                className="rounded-lg px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 transition-all duration-150 min-w-[38px] text-center"
+                title="ズームリセット"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                onClick={handleZoomIn}
+                disabled={zoom >= 3.0}
+                className="rounded-lg px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all duration-150"
+                title="ズームイン"
+              >
+                +
+              </button>
+            </div>
           </div>
           {/* Paper selector */}
           <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 flex-wrap">
@@ -311,7 +337,19 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               })()}
             </span>
           </div>
-          <div className="flex-1 overflow-auto bg-slate-100 p-4 flex justify-center" onClick={handleBackgroundClick}>
+          <div
+            className="flex-1 overflow-auto bg-slate-100 p-4 flex justify-center"
+            onClick={handleBackgroundClick}
+            onWheel={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                setZoom((z) => {
+                  const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                  return Math.max(0.5, Math.min(3.0, Math.round((z + delta) * 10) / 10));
+                });
+              }
+            }}
+          >
             <VisualPreview
               sheet={sheet}
               clusters={filteredClusters}
@@ -319,8 +357,12 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               selectedIds={selectedIds}
               onClusterClick={handleClusterClick}
               onContextMenu={handleContextMenu}
+              onUpdateCluster={updateCluster}
               paperSize={paperSize}
               orientation={orientation}
+              pdfBase64={formStructure.pdfBase64}
+              activeSheetIndex={activeSheet}
+              zoom={zoom}
             />
           </div>
         </div>
@@ -368,6 +410,192 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   );
 }
 
+// ─── Resize handle types ─────────────────────────────────────────────────────
+
+type ResizeEdge = "top" | "bottom" | "left" | "right";
+type ResizeHandle = {
+  edges: ResizeEdge[];
+  cursor: string;
+  position: React.CSSProperties;
+};
+
+const RESIZE_HANDLES: ResizeHandle[] = [
+  // Corner handles
+  { edges: ["top", "left"], cursor: "nw-resize", position: { top: -5, left: -5 } },
+  { edges: ["top", "right"], cursor: "ne-resize", position: { top: -5, right: -5 } },
+  { edges: ["bottom", "left"], cursor: "sw-resize", position: { bottom: -5, left: -5 } },
+  { edges: ["bottom", "right"], cursor: "se-resize", position: { bottom: -5, right: -5 } },
+  // Edge handles
+  { edges: ["top"], cursor: "n-resize", position: { top: -5, left: "50%", marginLeft: -5 } },
+  { edges: ["bottom"], cursor: "s-resize", position: { bottom: -5, left: "50%", marginLeft: -5 } },
+  { edges: ["left"], cursor: "w-resize", position: { top: "50%", left: -5, marginTop: -5 } },
+  { edges: ["right"], cursor: "e-resize", position: { top: "50%", right: -5, marginTop: -5 } },
+];
+
+const MIN_CLUSTER_SIZE_PX = 10;
+
+function ResizeHandles({
+  cluster,
+  tableScale,
+  usePdfMode,
+  sheet,
+  paperDims,
+  zoom,
+  onUpdateCluster,
+}: {
+  cluster: ClusterDefinition;
+  tableScale: number;
+  usePdfMode: boolean;
+  sheet: SheetStructure;
+  paperDims: { wPx: number; hPx: number; pxPerMm: number };
+  zoom: number;
+  onUpdateCluster: (id: string, patch: Partial<ClusterDefinition>) => void;
+}) {
+  const [resizingEdges, setResizingEdges] = useState<ResizeEdge[] | null>(null);
+
+  const handleMouseDown = useCallback(
+    (edges: ResizeEdge[], e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startRegion = { ...cluster.region };
+
+      setResizingEdges(edges);
+
+      // Compute the conversion factor: screen px -> Excel px
+      // In table mode: excelDelta = screenDelta / (tableScale * zoom)
+      // In PDF mode: need to reverse the PDF mapping
+      let scaleScreenToExcelX: number;
+      let scaleScreenToExcelY: number;
+
+      if (usePdfMode && sheet.printMeta) {
+        // Import dynamically avoided -- use inline reverse mapping
+        // From mapClusterRegionToPdf:
+        //   pdfNorm = (content.left + relX * content.width) / pageW
+        //   screenPx = pdfNorm * paperDims.wPx
+        // Where relX = (excelPx - paPx.left) / paPx.width
+        // So: screenPx = ((content.left + ((excelPx - paPx.left) / paPx.width) * content.width) / pageW) * paperDims.wPx
+        // d(screenPx)/d(excelPx) = (content.width / paPx.width / pageW) * paperDims.wPx
+        // Therefore: excelDelta = screenDelta / ((content.width / paPx.width / pageW) * paperDims.wPx * zoom)
+        const paPx = computePrintAreaPx(sheet, sheet.printMeta!);
+        const content = computePdfContentArea(sheet.printMeta!);
+        const pageW = sheet.printMeta!.pdfPageWidthPt;
+        const pageH = sheet.printMeta!.pdfPageHeightPt;
+
+        scaleScreenToExcelX = 1 / ((content.width / paPx.width / pageW) * paperDims.wPx * zoom);
+        scaleScreenToExcelY = 1 / ((content.height / paPx.height / pageH) * paperDims.hPx * zoom);
+      } else {
+        scaleScreenToExcelX = 1 / (tableScale * zoom);
+        scaleScreenToExcelY = 1 / (tableScale * zoom);
+      }
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const dx = (ev.clientX - startX) * scaleScreenToExcelX;
+        const dy = (ev.clientY - startY) * scaleScreenToExcelY;
+
+        const newRegion = { ...startRegion };
+
+        for (const edge of edges) {
+          switch (edge) {
+            case "top":
+              newRegion.top = startRegion.top + dy;
+              break;
+            case "bottom":
+              newRegion.bottom = startRegion.bottom + dy;
+              break;
+            case "left":
+              newRegion.left = startRegion.left + dx;
+              break;
+            case "right":
+              newRegion.right = startRegion.right + dx;
+              break;
+          }
+        }
+
+        // Enforce minimum size
+        if (newRegion.right - newRegion.left < MIN_CLUSTER_SIZE_PX) {
+          if (edges.includes("left")) {
+            newRegion.left = newRegion.right - MIN_CLUSTER_SIZE_PX;
+          } else {
+            newRegion.right = newRegion.left + MIN_CLUSTER_SIZE_PX;
+          }
+        }
+        if (newRegion.bottom - newRegion.top < MIN_CLUSTER_SIZE_PX) {
+          if (edges.includes("top")) {
+            newRegion.top = newRegion.bottom - MIN_CLUSTER_SIZE_PX;
+          } else {
+            newRegion.bottom = newRegion.top + MIN_CLUSTER_SIZE_PX;
+          }
+        }
+
+        onUpdateCluster(cluster.id, { region: newRegion });
+      };
+
+      const handleMouseUp = () => {
+        setResizingEdges(null);
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.body.style.cursor = edges.length === 4
+        ? "move"
+        : edges.length === 2
+          ? (edges.includes("top") ? (edges.includes("left") ? "nw-resize" : "ne-resize") : (edges.includes("left") ? "sw-resize" : "se-resize"))
+          : edges[0] === "top" || edges[0] === "bottom" ? "ns-resize" : "ew-resize";
+      document.body.style.userSelect = "none";
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [cluster, tableScale, usePdfMode, sheet, paperDims, zoom, onUpdateCluster]
+  );
+
+  const isCorner = (edges: ResizeEdge[]) => edges.length === 2;
+
+  return (
+    <>
+      {/* Move handle — covers the cluster interior */}
+      <div
+        onMouseDown={(e) => handleMouseDown(["top", "bottom", "left", "right"], e)}
+        className="absolute inset-1 z-30 cursor-move"
+      />
+      {/* Resize handles — corners and edges */}
+      {RESIZE_HANDLES.map((handle, i) => (
+        <div
+          key={i}
+          onMouseDown={(e) => handleMouseDown(handle.edges, e)}
+          className="absolute z-40"
+          style={{
+            ...handle.position,
+            width: 10,
+            height: 10,
+            cursor: handle.cursor,
+          }}
+        >
+          <div
+            className={`absolute inset-0 m-auto rounded-full bg-blue-500 ring-2 ring-white ${
+              resizingEdges && resizingEdges.join() === handle.edges.join()
+                ? "scale-125"
+                : ""
+            } transition-transform duration-100`}
+            style={{
+              width: isCorner(handle.edges) ? 8 : 6,
+              height: isCorner(handle.edges) ? 8 : 6,
+            }}
+          />
+        </div>
+      ))}
+      {resizingEdges && (
+        <div className="absolute inset-0 rounded bg-blue-500/5 pointer-events-none ring-2 ring-blue-400/40" />
+      )}
+    </>
+  );
+}
+
 // ─── Visual Preview ──────────────────────────────────────────────────────────
 
 function VisualPreview({
@@ -377,8 +605,12 @@ function VisualPreview({
   selectedIds,
   onClusterClick,
   onContextMenu,
+  onUpdateCluster,
   paperSize,
   orientation,
+  pdfBase64,
+  activeSheetIndex,
+  zoom = 1,
 }: {
   sheet: SheetStructure;
   clusters: ClusterDefinition[];
@@ -386,10 +618,17 @@ function VisualPreview({
   selectedIds: Set<string>;
   onClusterClick: (id: string, e: React.MouseEvent) => void;
   onContextMenu: (id: string, e: React.MouseEvent) => void;
+  onUpdateCluster: (id: string, patch: Partial<ClusterDefinition>) => void;
   paperSize: "A4" | "A3" | "B4";
   orientation: "portrait" | "landscape";
+  pdfBase64?: string;
+  activeSheetIndex: number;
+  zoom?: number;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const usePdfMode = !!pdfBase64 && !!sheet.printMeta;
 
   // Paper dimensions in px
   const paperDims = useMemo(() => {
@@ -400,7 +639,7 @@ function VisualPreview({
     return { wPx: wMm * pxPerMm, hPx: hMm * pxPerMm, pxPerMm };
   }, [paperSize, orientation]);
 
-  // Table scale to fit inside paper margins
+  // Table scale (for fallback HTML mode)
   const { tableScale, marginPx } = useMemo(() => {
     const margins = sheet.pageSetup?.margins ?? { top: 19.1, bottom: 19.1, left: 17.8, right: 17.8 };
     const mPx = {
@@ -419,8 +658,70 @@ function VisualPreview({
     return { tableScale: Math.min(scaleX, scaleY, 1), marginPx: mPx };
   }, [sheet, paperDims]);
 
-  // Build cell grid for the Excel table
+  // Render PDF page to canvas
+  const renderTaskRef = useRef<any>(null);
+  useEffect(() => {
+    if (!usePdfMode || !pdfBase64 || !canvasRef.current) return;
+    let cancelled = false;
+
+    // Cancel any in-progress render
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
+
+    (async () => {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+      const data = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+
+      const pageNum = Math.min(activeSheetIndex + 1, pdf.numPages);
+      const page = await pdf.getPage(pageNum);
+
+      if (cancelled) return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const viewport = page.getViewport({ scale: 1 });
+      const scaleX = paperDims.wPx / viewport.width;
+      const scaleY = paperDims.hPx / viewport.height;
+      const scale = Math.min(scaleX, scaleY);
+      const scaledViewport = page.getViewport({ scale: scale * (window.devicePixelRatio || 1) });
+
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+      canvas.style.width = `${paperDims.wPx}px`;
+      canvas.style.height = `${paperDims.hPx}px`;
+
+      const task = page.render({ canvasContext: ctx, viewport: scaledViewport, canvas } as any);
+      renderTaskRef.current = task;
+
+      try {
+        await task.promise;
+      } catch (e: any) {
+        if (e?.name === "RenderingCancelledException") return;
+        throw e;
+      }
+      renderTaskRef.current = null;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+    };
+  }, [usePdfMode, pdfBase64, activeSheetIndex, paperDims]);
+
+  // Build cell grid (for fallback HTML mode)
   const cellGrid = useMemo(() => {
+    if (usePdfMode) return { grid: new Map<string, CellInfo>(), merged: new Set<string>() };
     const grid = new Map<string, CellInfo>();
     const merged = new Set<string>();
     for (const cell of sheet.cells) {
@@ -437,133 +738,172 @@ function VisualPreview({
       }
     }
     return { grid, merged };
-  }, [sheet.cells]);
+  }, [sheet.cells, usePdfMode]);
+
+  // Drag-to-move state
+
+  // Cluster overlay renderer (shared between both modes)
+  const renderCluster = (cluster: ClusterDefinition) => {
+    const isSelected = cluster.id === selectedId;
+    const isInGroup = selectedIds.has(cluster.id);
+    const cc = confidenceColor(cluster.confidence);
+
+    let top: number, left: number, width: number, height: number;
+
+    if (usePdfMode && sheet.printMeta) {
+      const mapped = mapClusterRegionToPdf(cluster.region, sheet, sheet.printMeta);
+      if (!mapped) return null;
+      top = mapped.top * paperDims.hPx;
+      left = mapped.left * paperDims.wPx;
+      width = (mapped.right - mapped.left) * paperDims.wPx;
+      height = (mapped.bottom - mapped.top) * paperDims.hPx;
+    } else {
+      top = cluster.region.top * tableScale;
+      left = cluster.region.left * tableScale;
+      width = (cluster.region.right - cluster.region.left) * tableScale;
+      height = (cluster.region.bottom - cluster.region.top) * tableScale;
+    }
+
+    if (width < 1 || height < 1) return null;
+
+    return (
+      <div
+        key={cluster.id}
+        onClick={(e) => onClusterClick(cluster.id, e)}
+        onContextMenu={(e) => onContextMenu(cluster.id, e)}
+        className="absolute cursor-default transition-all duration-150"
+        style={{
+          top,
+          left,
+          width,
+          height,
+          backgroundColor: cc.bg,
+          border: isSelected
+            ? "2px solid rgb(59,130,246)"
+            : isInGroup
+              ? "2px solid rgb(147,197,253)"
+              : `1.5px solid ${cc.border}`,
+          borderRadius: 3,
+          zIndex: isSelected ? 30 : isInGroup ? 20 : 10,
+          boxShadow: isSelected
+            ? "0 0 0 3px rgba(59,130,246,0.2)"
+              : undefined,
+        }}
+        title={`${cluster.name} (${TYPE_LABELS[cluster.typeName]}) — ${Math.round(cluster.confidence * 100)}%`}
+      >
+        {width > 40 && height > 14 && (
+          <span
+            className="absolute inset-0 flex items-center justify-center text-center leading-none pointer-events-none select-none truncate px-0.5"
+            style={{ fontSize: Math.min(10, height * 0.5, width * 0.12) }}
+          >
+            <span className="bg-white/80 rounded px-0.5 py-px text-slate-700 font-medium">
+              {cluster.name.length > 12 ? cluster.name.slice(0, 11) + "..." : cluster.name}
+            </span>
+          </span>
+        )}
+        {isSelected && (
+          <ResizeHandles
+            cluster={cluster}
+            tableScale={tableScale}
+            usePdfMode={usePdfMode}
+            sheet={sheet}
+            paperDims={paperDims}
+            zoom={zoom}
+            onUpdateCluster={onUpdateCluster}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div
+      style={{
+        width: paperDims.wPx * zoom,
+        height: paperDims.hPx * zoom,
+        flexShrink: 0,
+      }}
+    >
+    <div
       ref={containerRef}
       className="bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out"
-      style={{ width: paperDims.wPx, height: paperDims.hPx }}
+      style={{
+        width: paperDims.wPx,
+        height: paperDims.hPx,
+        transform: `scale(${zoom})`,
+        transformOrigin: "top center",
+      }}
     >
-      {/* Excel grid + cluster overlays inside margins */}
-      <div
-        className="absolute overflow-hidden"
-        style={{
-          top: marginPx.top,
-          left: marginPx.left,
-          right: marginPx.right,
-          bottom: marginPx.bottom,
-        }}
-      >
-        {/* Excel grid background */}
-        <div
-          className="absolute top-0 left-0 origin-top-left"
-          style={{
-            transform: `scale(${tableScale})`,
-            width: sheet.totalWidth,
-            height: sheet.totalHeight,
-          }}
-        >
-          <table className="border-collapse text-[10px]" style={{ width: sheet.totalWidth }}>
-            <tbody>
-              {Array.from({ length: sheet.rowCount }, (_, r) => (
-                <tr key={r}>
-                  {Array.from({ length: sheet.colCount }, (_, c) => {
-                    const key = `${r},${c}`;
-                    if (cellGrid.merged.has(key)) return null;
-                    const cell = cellGrid.grid.get(key);
-                    const colSpan = cell?.mergeRange ? cell.mergeRange.endCol - cell.mergeRange.startCol + 1 : 1;
-                    const rowSpan = cell?.mergeRange ? cell.mergeRange.endRow - cell.mergeRange.startRow + 1 : 1;
-                    const width = sheet.colWidths[c] ?? 64;
-                    const height = sheet.rowHeights[r] ?? 20;
-
-                    return (
-                      <td
-                        key={c}
-                        colSpan={colSpan > 1 ? colSpan : undefined}
-                        rowSpan={rowSpan > 1 ? rowSpan : undefined}
-                        style={{
-                          minWidth: width,
-                          height,
-                          backgroundColor: cell?.style.bgColor ?? undefined,
-                          color: cell?.style.fontColor ?? undefined,
-                          fontWeight: cell?.style.bold ? "bold" : undefined,
-                          fontSize: cell?.style.fontSize ? `${Math.min(cell.style.fontSize, 11)}px` : undefined,
-                          textAlign: cell?.style.horizontalAlignment ?? "left",
-                        }}
-                        className="border border-slate-200/70 px-0.5 py-0 truncate leading-tight"
-                      >
-                        {cell?.value ?? ""}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Cluster overlays — positioned relative to the margin area, scaled same as the table */}
-        {clusters.map((cluster) => {
-          const isSelected = cluster.id === selectedId;
-          const isInGroup = selectedIds.has(cluster.id);
-          const cc = confidenceColor(cluster.confidence);
-
-          const top = cluster.region.top * tableScale;
-          const left = cluster.region.left * tableScale;
-          const width = (cluster.region.right - cluster.region.left) * tableScale;
-          const height = (cluster.region.bottom - cluster.region.top) * tableScale;
-
-          if (width < 1 || height < 1) return null;
-
-          return (
+      {usePdfMode ? (
+        <>
+          {/* PDF background */}
+          <canvas ref={canvasRef} className="absolute top-0 left-0" />
+          {/* Cluster overlays — positioned relative to the full PDF page */}
+          {clusters.map(renderCluster)}
+        </>
+      ) : (
+        <>
+          {/* Fallback: HTML table mode */}
+          <div
+            className="absolute overflow-hidden"
+            style={{
+              top: marginPx.top,
+              left: marginPx.left,
+              right: marginPx.right,
+              bottom: marginPx.bottom,
+            }}
+          >
             <div
-              key={cluster.id}
-              onClick={(e) => onClusterClick(cluster.id, e)}
-              onContextMenu={(e) => onContextMenu(cluster.id, e)}
-              className="absolute cursor-pointer transition-all duration-150"
+              className="absolute top-0 left-0 origin-top-left"
               style={{
-                top,
-                left,
-                width,
-                height,
-                backgroundColor: cc.bg,
-                border: isSelected
-                  ? "2px solid rgb(59,130,246)"
-                  : isInGroup
-                    ? "2px solid rgb(147,197,253)"
-                    : `1.5px solid ${cc.border}`,
-                borderRadius: 3,
-                zIndex: isSelected ? 30 : isInGroup ? 20 : 10,
-                boxShadow: isSelected ? "0 0 0 3px rgba(59,130,246,0.2)" : undefined,
+                transform: `scale(${tableScale})`,
+                width: sheet.totalWidth,
+                height: sheet.totalHeight,
               }}
-              title={`${cluster.name} (${TYPE_LABELS[cluster.typeName]}) — ${Math.round(cluster.confidence * 100)}%`}
             >
-              {/* Name label (only show if cluster is big enough) */}
-              {width > 40 && height > 14 && (
-                <span
-                  className="absolute inset-0 flex items-center justify-center text-center leading-none pointer-events-none select-none truncate px-0.5"
-                  style={{ fontSize: Math.min(10, height * 0.5, width * 0.12) }}
-                >
-                  <span className="bg-white/80 rounded px-0.5 py-px text-slate-700 font-medium">
-                    {cluster.name.length > 12 ? cluster.name.slice(0, 11) + "..." : cluster.name}
-                  </span>
-                </span>
-              )}
+              <table className="border-collapse text-[10px]" style={{ width: sheet.totalWidth }}>
+                <tbody>
+                  {Array.from({ length: sheet.rowCount }, (_, r) => (
+                    <tr key={r}>
+                      {Array.from({ length: sheet.colCount }, (_, c) => {
+                        const key = `${r},${c}`;
+                        if (cellGrid.merged.has(key)) return null;
+                        const cell = cellGrid.grid.get(key);
+                        const colSpan = cell?.mergeRange ? cell.mergeRange.endCol - cell.mergeRange.startCol + 1 : 1;
+                        const rowSpan = cell?.mergeRange ? cell.mergeRange.endRow - cell.mergeRange.startRow + 1 : 1;
+                        const width = sheet.colWidths[c] ?? 64;
+                        const height = sheet.rowHeights[r] ?? 20;
 
-              {/* Drag handles for selected cluster (visual placeholder for future resize) */}
-              {isSelected && (
-                <>
-                  <div className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
-                  <div className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
-                  <div className="absolute -bottom-1 -left-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
-                  <div className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full bg-blue-500 ring-2 ring-white" />
-                </>
-              )}
+                        return (
+                          <td
+                            key={c}
+                            colSpan={colSpan > 1 ? colSpan : undefined}
+                            rowSpan={rowSpan > 1 ? rowSpan : undefined}
+                            style={{
+                              minWidth: width,
+                              height,
+                              backgroundColor: cell?.style.bgColor ?? undefined,
+                              color: cell?.style.fontColor ?? undefined,
+                              fontWeight: cell?.style.bold ? "bold" : undefined,
+                              fontSize: cell?.style.fontSize ? `${Math.min(cell.style.fontSize, 11)}px` : undefined,
+                              textAlign: cell?.style.horizontalAlignment ?? "left",
+                            }}
+                            className="border border-slate-200/70 px-0.5 py-0 truncate leading-tight"
+                          >
+                            {cell?.value ?? ""}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          );
-        })}
-      </div>
+            {clusters.map(renderCluster)}
+          </div>
+        </>
+      )}
+    </div>
     </div>
   );
 }

@@ -106,12 +106,6 @@ const TYPE_DEFAULTS: TypeDefaults[] = [
     fallback:
       "Decimal=0;Comma=0;Align=Right;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
   },
-  // FixedText (20)
-  {
-    typeCode: CLUSTER_TYPES.FixedText,
-    rules: [],
-    fallback: "Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0;Align=Left",
-  },
   // Select (70)
   {
     typeCode: CLUSTER_TYPES.Select,

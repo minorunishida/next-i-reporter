@@ -14,7 +14,6 @@ function confidenceBadge(c: number) {
 
 function typeLabel(typeName: string) {
   const map: Record<string, string> = {
-    FixedText: "固定テキスト",
     KeyboardText: "テキスト入力",
     Date: "日付",
     Time: "時刻",

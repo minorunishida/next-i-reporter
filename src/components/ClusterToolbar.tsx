@@ -17,7 +17,6 @@ type Props = {
 };
 
 const TYPE_LABELS: Record<ClusterTypeName, string> = {
-  FixedText: "固定テキスト",
   KeyboardText: "テキスト入力",
   Date: "日付",
   Time: "時刻",

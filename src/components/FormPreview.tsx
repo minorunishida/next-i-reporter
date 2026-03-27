@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import type { FormStructure, CellInfo, SheetStructure } from "@/lib/form-structure";
 
 // --- 用紙サイズ定義 (mm) ---
@@ -122,43 +122,51 @@ export default function FormPreview({ formStructure }: Props) {
         sizeLabel={sizeLabel}
       />
 
-      {/* A4 Paper preview */}
+      {/* Paper preview */}
       <div className="rounded-xl bg-slate-100 p-6 flex justify-center overflow-hidden">
-        <div
-          className="bg-white shadow-xl ring-1 ring-slate-200/80 overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0 relative"
-          style={{
-            width: paperDimensions.wPx,
-            height: paperDimensions.hPx,
-            maxWidth: "100%",
-          }}
-        >
-          {/* マージン内にテーブルを配置。overflow-hidden で紙の外にはみ出さない */}
+        {formStructure.pdfBase64 ? (
+          <PdfPagePreview
+            pdfBase64={formStructure.pdfBase64}
+            pageIndex={activeSheet}
+            wPx={paperDimensions.wPx}
+            hPx={paperDimensions.hPx}
+          />
+        ) : (
           <div
-            className="relative overflow-hidden"
+            className="bg-white shadow-xl ring-1 ring-slate-200/80 overflow-hidden transition-all duration-300 ease-in-out flex-shrink-0 relative"
             style={{
-              width: "100%",
-              height: "100%",
-              padding: (() => {
-                const margins = sheet.pageSetup?.margins ?? { top: 19.1, bottom: 19.1, left: 17.8, right: 17.8 };
-                const pxPerMm = BASE_PAPER_WIDTH_PX / PAPER_SIZES.A4.w;
-                return `${margins.top * pxPerMm}px ${margins.right * pxPerMm}px ${margins.bottom * pxPerMm}px ${margins.left * pxPerMm}px`;
-              })(),
+              width: paperDimensions.wPx,
+              height: paperDimensions.hPx,
+              maxWidth: "100%",
             }}
           >
             <div
-              className="origin-top-left"
+              className="relative overflow-hidden"
               style={{
-                transform: `scale(${tableScale})`,
-                transformOrigin: "top left",
-                width: sheet.totalWidth,
-                height: sheet.totalHeight,
-                maxWidth: "none",
+                width: "100%",
+                height: "100%",
+                padding: (() => {
+                  const margins = sheet.pageSetup?.margins ?? { top: 19.1, bottom: 19.1, left: 17.8, right: 17.8 };
+                  const pxPerMm = BASE_PAPER_WIDTH_PX / PAPER_SIZES.A4.w;
+                  return `${margins.top * pxPerMm}px ${margins.right * pxPerMm}px ${margins.bottom * pxPerMm}px ${margins.left * pxPerMm}px`;
+                })(),
               }}
             >
-              <SheetTable sheet={sheet} />
+              <div
+                className="origin-top-left"
+                style={{
+                  transform: `scale(${tableScale})`,
+                  transformOrigin: "top left",
+                  width: sheet.totalWidth,
+                  height: sheet.totalHeight,
+                  maxWidth: "none",
+                }}
+              >
+                <SheetTable sheet={sheet} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Cell stats */}
@@ -244,6 +252,75 @@ function PaperSelector({
         {sizeLabel}
       </span>
     </div>
+  );
+}
+
+// --- PDF Page Preview ---
+
+function PdfPagePreview({ pdfBase64, pageIndex, wPx, hPx }: { pdfBase64: string; pageIndex: number; wPx: number; hPx: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (renderTaskRef.current) {
+      renderTaskRef.current.cancel();
+      renderTaskRef.current = null;
+    }
+
+    (async () => {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+      const data = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
+      const pdf = await pdfjsLib.getDocument({ data }).promise;
+      const pageNum = Math.min(pageIndex + 1, pdf.numPages);
+      const page = await pdf.getPage(pageNum);
+
+      if (cancelled) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const viewport = page.getViewport({ scale: 1 });
+      const scaleX = wPx / viewport.width;
+      const scaleY = hPx / viewport.height;
+      const scale = Math.min(scaleX, scaleY);
+      const dpr = window.devicePixelRatio || 1;
+      const scaledViewport = page.getViewport({ scale: scale * dpr });
+
+      canvas.width = scaledViewport.width;
+      canvas.height = scaledViewport.height;
+      canvas.style.width = `${wPx}px`;
+      canvas.style.height = `${hPx}px`;
+
+      const task = page.render({ canvasContext: ctx, viewport: scaledViewport, canvas } as any);
+      renderTaskRef.current = task;
+      try {
+        await task.promise;
+      } catch (e: any) {
+        if (e?.name === "RenderingCancelledException") return;
+        throw e;
+      }
+      renderTaskRef.current = null;
+    })();
+
+    return () => {
+      cancelled = true;
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+        renderTaskRef.current = null;
+      }
+    };
+  }, [pdfBase64, pageIndex, wPx, hPx]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="shadow-xl ring-1 ring-slate-200/80 flex-shrink-0"
+      style={{ width: wPx, height: hPx }}
+    />
   );
 }
 

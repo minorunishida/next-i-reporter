@@ -1,64 +1,96 @@
 /**
- * Excel → PDF 変換
+ * Excel → PDF 変換 + 印刷メタ情報取得
  *
  * 優先順位:
- * 1. EXCEL_TO_PDF_API_URL (自前 API) — 最優先
- * 2. Graph API (Azure AD) — フォールバック
+ * 1. eprint CLI (ローカル COM Interop) — 最優先、メタ情報も返す
+ * 2. Graph API (Azure AD) — フォールバック (メタ情報なし)
  * 3. null を返す (ブランク PDF にフォールバック)
  */
+
+import { execFile } from "node:child_process";
+import { writeFile, readFile, unlink, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { PrintMeta } from "./form-structure";
+
+export type PdfConversionResult = {
+  pdfBuffer: Buffer;
+  printMeta?: PrintMeta[];
+};
+
 export async function convertExcelToPdf(
   excelBuffer: Buffer,
   fileName: string
-): Promise<Buffer | null> {
-  // 1. 自前 API
-  const customApiUrl = process.env.EXCEL_TO_PDF_API_URL;
-  if (customApiUrl) {
-    return convertViaCustomApi(customApiUrl, excelBuffer, fileName);
+): Promise<PdfConversionResult | null> {
+  // 1. eprint CLI
+  const eprintPath = process.env.EPRINT_CLI_PATH;
+  if (eprintPath) {
+    return convertViaEprintCli(eprintPath, excelBuffer, fileName);
   }
 
   // 2. Graph API
   if (isGraphAvailable()) {
-    return convertViaGraphApi(excelBuffer, fileName);
+    const buf = await convertViaGraphApi(excelBuffer, fileName);
+    return buf ? { pdfBuffer: buf } : null;
   }
 
-  console.warn("[excel-to-pdf] 変換 API 未設定 — ブランク PDF にフォールバック");
+  console.warn("[excel-to-pdf] 変換手段なし — ブランク PDF にフォールバック");
   return null;
 }
 
-// --- 自前 API ---
+// --- eprint CLI ---
 
-async function convertViaCustomApi(
-  apiUrl: string,
+async function convertViaEprintCli(
+  eprintPath: string,
   excelBuffer: Buffer,
   fileName: string
-): Promise<Buffer | null> {
+): Promise<PdfConversionResult | null> {
+  const tempDir = await mkdtemp(path.join(tmpdir(), "eprint-"));
+  const inputPath = path.join(tempDir, fileName);
+  const outputPath = path.join(tempDir, fileName.replace(/\.xlsx?$/i, ".pdf"));
+
   try {
-    console.log(`[excel-to-pdf] Custom API: ${apiUrl}`);
+    await writeFile(inputPath, excelBuffer);
 
-    const formData = new FormData();
-    const blob = new Blob([excelBuffer as BlobPart], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    formData.append("file", blob, fileName);
+    console.log(`[excel-to-pdf] eprint CLI: ${eprintPath}`);
+    const stdout = await execFileAsync(eprintPath, [
+      inputPath,
+      outputPath,
+      "--meta",
+    ]);
 
-    const res = await fetch(apiUrl, {
-      method: "POST",
-      body: formData,
-    });
+    const meta = JSON.parse(stdout) as {
+      pdfPath: string;
+      sheets: PrintMeta[];
+    };
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
-    }
+    const pdfBuffer = await readFile(outputPath);
+    console.log(
+      `[excel-to-pdf] PDF generated: ${pdfBuffer.length} bytes, ${meta.sheets.length} sheets`
+    );
 
-    const arrayBuffer = await res.arrayBuffer();
-    const pdfBuffer = Buffer.from(arrayBuffer);
-    console.log(`[excel-to-pdf] PDF generated: ${pdfBuffer.length} bytes`);
-    return pdfBuffer;
+    return { pdfBuffer, printMeta: meta.sheets };
   } catch (e) {
-    console.error("[excel-to-pdf] Custom API error:", e);
+    console.error("[excel-to-pdf] eprint CLI error:", e);
     return null;
+  } finally {
+    // 一時ファイル削除
+    await unlink(inputPath).catch(() => {});
+    await unlink(outputPath).catch(() => {});
+    await unlink(tempDir).catch(() => {}); // rmdir
   }
+}
+
+function execFileAsync(cmd: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, { timeout: 120_000 }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${error.message}\nstderr: ${stderr}`));
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
 }
 
 // --- Graph API (フォールバック) ---

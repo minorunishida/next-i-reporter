@@ -54,6 +54,49 @@ export type PageSetup = {
   margins: { top: number; bottom: number; left: number; right: number }; // in mm
 };
 
+/** eprint CLI (COM Interop) から取得する印刷メタ情報 */
+export type PrintMeta = {
+  name: string;
+  printArea?: {
+    address: string;
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+    top: number;    // pt (シート原点からの絶対位置)
+    left: number;
+    width: number;
+    height: number;
+  };
+  usedRange: {
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+  zoom?: number;             // 手動拡大率 (10-400)
+  fitToPagesWide?: number;   // ページ幅に合わせる
+  fitToPagesTall?: number;   // ページ高さに合わせる
+  margins: {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+    header: number;
+    footer: number;
+  }; // pt
+  paperSize: number;
+  orientation: number;       // 1=Portrait, 2=Landscape
+  pdfPageWidthPt: number;
+  pdfPageHeightPt: number;
+  rows: Array<{ row: number; height: number; top: number }>; // pt
+  columns: Array<{ col: number; width: number; left: number }>; // pt
+};
+
 export type SheetStructure = {
   name: string;
   index: number;
@@ -65,6 +108,7 @@ export type SheetStructure = {
   totalHeight: number; // px
   cells: CellInfo[];
   pageSetup: PageSetup;
+  printMeta?: PrintMeta;
 };
 
 // --- 帳票構造 (中間表現のルート) ---
@@ -78,7 +122,6 @@ export type FormStructure = {
 // --- クラスタ定義 (AI 推論結果) ---
 
 export const CLUSTER_TYPES = {
-  FixedText: 20,
   KeyboardText: 30,
   Date: 40,
   Time: 50,
