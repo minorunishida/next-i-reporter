@@ -275,3 +275,126 @@ async function analyzeSheet(
   }));
 }
 
+// ─── Single-region analysis ──────────────────────────────────────────────────
+
+const REGION_SYSTEM_PROMPT = `あなたは ConMas i-Reporter の帳票設計エキスパートです。
+
+ユーザーが帳票上で矩形を描いた領域のセル情報を受け取ります。
+この領域が帳票上のどのような入力項目（クラスター）に対応するかを**1つだけ**推測してください。
+
+## クラスター型
+- KeyboardText (30): テキスト入力。名前、住所、担当者名、備考欄など。
+- Date (40): 日付入力。
+- Time (50): 時刻入力。
+- InputNumeric (65): 数値入力（温度、数量、金額など）。
+- Calculate (67): Excel数式がある計算セル。
+- Select (70): 選択肢リスト。
+- Check (90): チェックボックス。
+- Image (100): 画像・写真エリア。
+- Handwriting (119): 手書き署名・印鑑エリア。
+
+## 判断のポイント
+1. 領域内のセルの値、書式、結合状態、周辺ラベルから総合的に判断
+2. 空白セル + 近くにラベル → 入力クラスター
+3. 数式セル → Calculate
+4. 大きな結合セル → Image, Handwriting, または備考
+5. 周辺コンテキスト (contextCells) を参考にラベルを確認
+
+## inputParameters
+セミコロン区切りの key=value 形式で適切なパラメータを設定してください。
+
+推測結果を1つだけ返してください。`;
+
+export type RegionAnalysisResult = {
+  name: string;
+  typeName: string;
+  type: number;
+  confidence: number;
+  inputParameters: string;
+  readOnly: boolean;
+  cellAddress: string;
+  formula?: string | null;
+};
+
+/**
+ * Analyze a single rectangular region drawn by the user.
+ * Returns a single cluster suggestion.
+ */
+export async function analyzeRegion(
+  sheet: SheetStructure,
+  regionCells: { address: string; row: number; col: number; value: string; formula?: string; isMerged: boolean; region: { top: number; bottom: number; left: number; right: number }; style: Record<string, unknown>; dataValidation?: unknown }[],
+  contextCells: { address: string; row: number; col: number; value: string; region: { top: number; bottom: number; left: number; right: number } }[],
+  drawnRegion: { top: number; bottom: number; left: number; right: number }
+): Promise<RegionAnalysisResult> {
+  const cellsSummary = regionCells.map((c) => ({
+    addr: c.address,
+    r: c.row,
+    c: c.col,
+    val: c.value || undefined,
+    formula: c.formula || undefined,
+    merged: c.isMerged || undefined,
+    rgn: c.region,
+    fmt: (c.style as Record<string, unknown>).numberFormat || undefined,
+    bold: (c.style as Record<string, unknown>).bold || undefined,
+    bg: (c.style as Record<string, unknown>).bgColor || undefined,
+    dv: c.dataValidation || undefined,
+  }));
+
+  const contextSummary = contextCells.map((c) => ({
+    addr: c.address,
+    r: c.row,
+    c: c.col,
+    val: c.value,
+  }));
+
+  const userMessage = JSON.stringify({
+    sheetName: sheet.name,
+    drawnRegion,
+    cells: cellsSummary,
+    contextCells: contextSummary,
+  }, null, 0);
+
+  const response = await openai.responses.create({
+    model: MODEL,
+    instructions: REGION_SYSTEM_PROMPT,
+    input: userMessage,
+    text: {
+      format: {
+        type: "json_schema",
+        name: "single_cluster",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "クラスター名 (日本語)" },
+            typeName: {
+              type: "string",
+              enum: ["KeyboardText", "Date", "Time", "InputNumeric", "Calculate", "Select", "Check", "Image", "Handwriting"],
+            },
+            type: { type: "number" },
+            cellAddress: { type: "string" },
+            confidence: { type: "number" },
+            readOnly: { type: "boolean" },
+            inputParameters: { type: "string" },
+            formula: { type: ["string", "null"] },
+          },
+          required: ["name", "typeName", "type", "cellAddress", "confidence", "readOnly", "inputParameters", "formula"],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+
+  const parsed = JSON.parse(response.output_text);
+  return {
+    name: String(parsed.name ?? "新規クラスター"),
+    typeName: String(parsed.typeName ?? "KeyboardText"),
+    type: Number(parsed.type ?? 30),
+    confidence: Number(parsed.confidence ?? 0.7),
+    inputParameters: String(parsed.inputParameters ?? ""),
+    readOnly: Boolean(parsed.readOnly),
+    cellAddress: String(parsed.cellAddress ?? ""),
+    formula: parsed.formula != null ? String(parsed.formula) : undefined,
+  };
+}
+

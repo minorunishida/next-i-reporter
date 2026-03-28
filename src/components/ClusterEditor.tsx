@@ -12,6 +12,8 @@ import type {
 import { CLUSTER_TYPES } from "@/lib/form-structure";
 import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
 import ClusterToolbar from "./ClusterToolbar";
+import CreateClusterPopover from "./CreateClusterPopover";
+import type { RegionAnalysisResult } from "@/lib/ai-analyzer";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -86,6 +88,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; clusterId: string } | null>(null);
   const [zoom, setZoom] = useState(1.0);
+  const [editorMode, setEditorMode] = useState<"select" | "create">("select");
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(3.0, Math.round((z + 0.1) * 10) / 10)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10)), []);
@@ -236,11 +239,19 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (selectedIds.size === 0) return;
       // Don't intercept when typing in inputs
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
 
+      // Mode switching
+      switch (e.key) {
+        case "n": case "N": setEditorMode("create"); return;
+        case "v": case "V": setEditorMode("select"); return;
+        case "Escape": setEditorMode("select"); return;
+      }
+
+      // Nudge (only when clusters are selected)
+      if (selectedIds.size === 0) return;
       const step = e.shiftKey ? 10 : 1;
       switch (e.key) {
         case "ArrowUp":    e.preventDefault(); handleNudge(0, -step); break;
@@ -253,12 +264,103 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
     return () => window.removeEventListener("keydown", handler);
   }, [selectedIds, handleNudge]);
 
+  // Create mode: pending region for popover
+  const [pendingCreate, setPendingCreate] = useState<{
+    region: { top: number; bottom: number; left: number; right: number };
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+
+  const handleCreateDragEnd = useCallback(
+    (region: { top: number; bottom: number; left: number; right: number; screenX: number; screenY: number }) => {
+      setPendingCreate({ region, screenX: region.screenX, screenY: region.screenY });
+    },
+    []
+  );
+
+  const handleRequestAi = useCallback(async () => {
+    if (!pendingCreate) throw new Error("No region");
+    const { region } = pendingCreate;
+
+    // Find cells within the drawn region (+ context cells nearby)
+    const regionCells = sheet.cells.filter((c) =>
+      c.region.right > region.left && c.region.left < region.right &&
+      c.region.bottom > region.top && c.region.top < region.bottom
+    ).map((c) => ({
+      address: c.address,
+      row: c.row,
+      col: c.col,
+      value: c.value,
+      formula: c.formula,
+      isMerged: c.isMerged,
+      region: c.region,
+      style: c.style as Record<string, unknown>,
+      dataValidation: c.dataValidation,
+    }));
+
+    // Context: cells 1-2 rows/cols outside the region
+    const pad = 40; // px padding for context
+    const contextCells = sheet.cells.filter((c) => {
+      if (c.region.right > region.left && c.region.left < region.right &&
+          c.region.bottom > region.top && c.region.top < region.bottom) return false;
+      return c.value && (
+        c.region.right > region.left - pad && c.region.left < region.right + pad &&
+        c.region.bottom > region.top - pad && c.region.top < region.bottom + pad
+      );
+    }).map((c) => ({
+      address: c.address,
+      row: c.row,
+      col: c.col,
+      value: c.value,
+      region: c.region,
+    }));
+
+    const res = await fetch("/api/ai-analyze-region", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sheet, regionCells, contextCells, drawnRegion: region }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error ?? "AI推論に失敗しました");
+    return await res.json() as RegionAnalysisResult;
+  }, [pendingCreate, sheet]);
+
+  const handleConfirmCreate = useCallback(
+    (data: { name: string; typeName: string; type: number; inputParameters: string; readOnly: boolean; cellAddress: string; formula?: string }) => {
+      if (!pendingCreate) return;
+      const newCluster = {
+        id: crypto.randomUUID(),
+        name: data.name,
+        type: data.type,
+        typeName: data.typeName as ClusterDefinition["typeName"],
+        sheetNo: activeSheet,
+        cellAddress: data.cellAddress || "A1",
+        region: pendingCreate.region,
+        confidence: 1.0, // User-created
+        readOnly: data.readOnly,
+        inputParameters: data.inputParameters,
+        excelOutputValue: data.cellAddress || "A1",
+        formula: data.formula,
+      };
+      onClustersChange([...clusters, newCluster]);
+      setSelectedId(newCluster.id);
+      setSelectedIds(new Set([newCluster.id]));
+      setPendingCreate(null);
+    },
+    [pendingCreate, activeSheet, clusters, onClustersChange]
+  );
+
+  const handleCancelCreate = useCallback(() => {
+    setPendingCreate(null);
+  }, []);
+
   return (
     <div className="flex flex-col gap-4 animate-fade-in-up">
       {/* Toolbar */}
       <ClusterToolbar
         clusters={sheetClusters}
         selectedIds={selectedIds}
+        editorMode={editorMode}
+        onModeChange={setEditorMode}
         filterType={filterType}
         filterConfidence={filterConfidence}
         searchQuery={searchQuery}
@@ -433,9 +535,22 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               pdfBase64={formStructure.pdfBase64}
               activeSheetIndex={activeSheet}
               zoom={zoom}
+              editorMode={editorMode}
+              onCreateDragEnd={handleCreateDragEnd}
             />
           </div>
         </div>
+
+        {/* Create cluster popover */}
+        {pendingCreate && (
+          <CreateClusterPopover
+            screenX={pendingCreate.screenX}
+            screenY={pendingCreate.screenY}
+            onRequestAi={handleRequestAi}
+            onConfirm={handleConfirmCreate}
+            onCancel={handleCancelCreate}
+          />
+        )}
 
         {/* RIGHT: Property panel */}
         <div className="w-80 shrink-0 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/60 overflow-hidden flex flex-col">
@@ -828,6 +943,8 @@ function VisualPreview({
   pdfBase64,
   activeSheetIndex,
   zoom = 1,
+  editorMode = "select",
+  onCreateDragEnd,
 }: {
   sheet: SheetStructure;
   clusters: ClusterDefinition[];
@@ -843,6 +960,8 @@ function VisualPreview({
   pdfBase64?: string;
   activeSheetIndex: number;
   zoom?: number;
+  editorMode?: "select" | "create";
+  onCreateDragEnd?: (region: { top: number; bottom: number; left: number; right: number; screenX: number; screenY: number }) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -968,6 +1087,7 @@ function VisualPreview({
   const handleRubberBandStart = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return;
+      if (editorMode === "create") return; // create mode uses its own handler
       // Skip if the click target is a cluster overlay or interactive element (move/resize handle)
       const el = e.target as HTMLElement;
       if (el.closest("[data-cluster-id]") || el.closest("[data-group-box]")) return;
@@ -1038,7 +1158,98 @@ function VisualPreview({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [clusters, zoom, usePdfMode, sheet, paperDims, tableScale, onRubberBandSelect]
+    [clusters, zoom, usePdfMode, sheet, paperDims, tableScale, onRubberBandSelect, editorMode]
+  );
+
+  // Create mode drag
+  const [createDrag, setCreateDrag] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+
+  const handleCreateDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      if (editorMode !== "create") return;
+      const el = e.target as HTMLElement;
+      if (el.closest("[data-cluster-id]")) return;
+
+      const containerEl = containerRef.current;
+      if (!containerEl) return;
+      const rect = containerEl.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / zoom;
+      const y = (e.clientY - rect.top) / zoom;
+
+      setCreateDrag({ startX: x, startY: y, endX: x, endY: y });
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const mx = (ev.clientX - rect.left) / zoom;
+        const my = (ev.clientY - rect.top) / zoom;
+        setCreateDrag((prev) => prev ? { ...prev, endX: mx, endY: my } : null);
+      };
+
+      const handleMouseUp = (ev: MouseEvent) => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+
+        const mx = (ev.clientX - rect.left) / zoom;
+        const my = (ev.clientY - rect.top) / zoom;
+
+        const left = Math.min(x, mx);
+        const right = Math.max(x, mx);
+        const top = Math.min(y, my);
+        const bottom = Math.max(y, my);
+
+        setCreateDrag(null);
+
+        // Minimum size check (20px)
+        if (right - left < 20 || bottom - top < 20) return;
+
+        // Convert screen coordinates back to Excel coordinates for the region
+        let excelRegion: { top: number; left: number; right: number; bottom: number };
+        if (usePdfMode && sheet.printMeta) {
+          const paPx = computePrintAreaPx(sheet, sheet.printMeta);
+          const content = computePdfContentArea(sheet.printMeta);
+          const pageW = sheet.printMeta.pdfPageWidthPt;
+          const pageH = sheet.printMeta.pdfPageHeightPt;
+
+          const normLeft = left / paperDims.wPx;
+          const normRight = right / paperDims.wPx;
+          const normTop = top / paperDims.hPx;
+          const normBottom = bottom / paperDims.hPx;
+
+          const relLeft = (normLeft * pageW - content.left) / content.width;
+          const relRight = (normRight * pageW - content.left) / content.width;
+          const relTop = (normTop * pageH - content.top) / content.height;
+          const relBottom = (normBottom * pageH - content.top) / content.height;
+
+          excelRegion = {
+            left: paPx.left + relLeft * paPx.width,
+            right: paPx.left + relRight * paPx.width,
+            top: paPx.top + relTop * paPx.height,
+            bottom: paPx.top + relBottom * paPx.height,
+          };
+        } else {
+          excelRegion = {
+            top: top / tableScale,
+            left: left / tableScale,
+            right: right / tableScale,
+            bottom: bottom / tableScale,
+          };
+        }
+
+        onCreateDragEnd?.({
+          ...excelRegion,
+          screenX: ev.clientX,
+          screenY: ev.clientY,
+        });
+
+        // Prevent background click from clearing
+        justRubberBandedRef.current = true;
+        setTimeout(() => { justRubberBandedRef.current = false; }, 0);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [editorMode, zoom, usePdfMode, sheet, paperDims, tableScale, onCreateDragEnd]
   );
 
   // Cluster overlay renderer (shared between both modes)
@@ -1136,8 +1347,10 @@ function VisualPreview({
     >
     <div
       ref={containerRef}
-      onMouseDown={handleRubberBandStart}
-      className="bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out"
+      onMouseDown={(e) => { handleRubberBandStart(e); handleCreateDragStart(e); }}
+      className={`bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out ${
+        editorMode === "create" ? "cursor-crosshair" : ""
+      }`}
       style={{
         width: paperDims.wPx,
         height: paperDims.hPx,
@@ -1145,6 +1358,19 @@ function VisualPreview({
         transformOrigin: "top center",
       }}
     >
+      {/* Create mode drag overlay */}
+      {createDrag && (() => {
+        const x = Math.min(createDrag.startX, createDrag.endX);
+        const y = Math.min(createDrag.startY, createDrag.endY);
+        const w = Math.abs(createDrag.endX - createDrag.startX);
+        const h = Math.abs(createDrag.endY - createDrag.startY);
+        return (
+          <div
+            className="absolute pointer-events-none z-50 border-2 border-emerald-400 bg-emerald-100/20 rounded-sm"
+            style={{ left: x, top: y, width: w, height: h }}
+          />
+        );
+      })()}
       {/* Rubber band selection overlay */}
       {rubberBand && (() => {
         const x = Math.min(rubberBand.startX, rubberBand.endX);

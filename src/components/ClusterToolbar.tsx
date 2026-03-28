@@ -5,6 +5,8 @@ import type { ClusterDefinition, ClusterTypeName } from "@/lib/form-structure";
 type Props = {
   clusters: ClusterDefinition[];
   selectedIds: Set<string>;
+  editorMode: "select" | "create";
+  onModeChange: (mode: "select" | "create") => void;
   filterType: ClusterTypeName | "all";
   filterConfidence: "all" | "high" | "medium" | "low";
   searchQuery: string;
@@ -32,6 +34,8 @@ const TYPE_LABELS: Record<ClusterTypeName, string> = {
 export default function ClusterToolbar({
   clusters,
   selectedIds,
+  editorMode,
+  onModeChange,
   filterType,
   filterConfidence,
   searchQuery,
@@ -51,9 +55,42 @@ export default function ClusterToolbar({
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200/60">
-      {/* Top row: summary + actions */}
+      {/* Top row: mode toggle + summary + actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
+          {/* Mode toggle */}
+          <div className="flex items-center rounded-lg ring-1 ring-slate-200/60 overflow-hidden">
+            <button
+              onClick={() => onModeChange("select")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium transition-all duration-150 ${
+                editorMode === "select"
+                  ? "bg-blue-50 text-blue-700 shadow-inner"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              }`}
+              title="選択モード (V)"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+              </svg>
+              選択
+            </button>
+            <div className="w-px h-5 bg-slate-200" />
+            <button
+              onClick={() => onModeChange("create")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium transition-all duration-150 ${
+                editorMode === "create"
+                  ? "bg-emerald-50 text-emerald-700 shadow-inner"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              }`}
+              title="作成モード (N)"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              作成
+            </button>
+          </div>
+
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 ring-1 ring-blue-100">
             <svg className="h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
