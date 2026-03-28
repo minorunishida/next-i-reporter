@@ -124,6 +124,18 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
     [clusters, onClustersChange]
   );
 
+  /** Batch-update multiple clusters at once (avoids stale-state overwrites) */
+  const updateClusters = useCallback(
+    (patches: Map<string, Partial<ClusterDefinition>>) => {
+      const next = clusters.map((c) => {
+        const patch = patches.get(c.id);
+        return patch ? { ...c, ...patch } : c;
+      });
+      onClustersChange(next);
+    },
+    [clusters, onClustersChange]
+  );
+
   const deleteCluster = useCallback(
     (id: string) => {
       onClustersChange(clusters.filter((c) => c.id !== id));
@@ -184,11 +196,62 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
     return () => window.removeEventListener("click", handler);
   }, [contextMenuPos]);
 
+  // Rubber band selection
+  const handleRubberBandSelect = useCallback(
+    (ids: Set<string>) => {
+      setSelectedIds(ids);
+      // Set the first one as primary selected
+      const first = ids.values().next().value;
+      setSelectedId(first ?? null);
+    },
+    []
+  );
+
   // Deselect on background click
   const handleBackgroundClick = useCallback(() => {
     setSelectedId(null);
     setSelectedIds(new Set());
   }, []);
+
+  // Nudge selected clusters with arrow keys
+  const handleNudge = useCallback(
+    (dx: number, dy: number) => {
+      if (selectedIds.size === 0) return;
+      const next = clusters.map((c) => {
+        if (!selectedIds.has(c.id)) return c;
+        return {
+          ...c,
+          region: {
+            top: c.region.top + dy,
+            bottom: c.region.bottom + dy,
+            left: c.region.left + dx,
+            right: c.region.right + dx,
+          },
+        };
+      });
+      onClustersChange(next);
+    },
+    [clusters, selectedIds, onClustersChange]
+  );
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (selectedIds.size === 0) return;
+      // Don't intercept when typing in inputs
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const step = e.shiftKey ? 10 : 1;
+      switch (e.key) {
+        case "ArrowUp":    e.preventDefault(); handleNudge(0, -step); break;
+        case "ArrowDown":  e.preventDefault(); handleNudge(0, step); break;
+        case "ArrowLeft":  e.preventDefault(); handleNudge(-step, 0); break;
+        case "ArrowRight": e.preventDefault(); handleNudge(step, 0); break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedIds, handleNudge]);
 
   return (
     <div className="flex flex-col gap-4 animate-fade-in-up">
@@ -205,6 +268,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
         onBulkDelete={handleBulkDelete}
+        onNudge={handleNudge}
       />
 
       {/* Sheet tabs */}
@@ -259,14 +323,16 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               <button
                 onClick={handleZoomOut}
                 disabled={zoom <= 0.5}
-                className="rounded-lg px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all duration-150"
+                className="rounded-lg p-1.5 text-slate-500 ring-1 ring-slate-200/60 cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:ring-blue-200/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:ring-slate-200/60 transition-all duration-150"
                 title="ズームアウト"
               >
-                −
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M11 8H7m10 3a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </button>
               <button
                 onClick={handleZoomReset}
-                className="rounded-lg px-1.5 py-0.5 text-[10px] font-medium text-slate-500 hover:bg-slate-100 transition-all duration-150 min-w-[38px] text-center"
+                className="rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200/60 cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:ring-blue-200/60 transition-all duration-150 min-w-[44px] text-center"
                 title="ズームリセット"
               >
                 {Math.round(zoom * 100)}%
@@ -274,10 +340,12 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               <button
                 onClick={handleZoomIn}
                 disabled={zoom >= 3.0}
-                className="rounded-lg px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all duration-150"
+                className="rounded-lg p-1.5 text-slate-500 ring-1 ring-slate-200/60 cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:ring-blue-200/60 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 disabled:hover:ring-slate-200/60 transition-all duration-150"
                 title="ズームイン"
               >
-                +
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10 8v6m3-3H7m10 0a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -358,6 +426,8 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               onClusterClick={handleClusterClick}
               onContextMenu={handleContextMenu}
               onUpdateCluster={updateCluster}
+              onBulkUpdateClusters={updateClusters}
+              onRubberBandSelect={handleRubberBandSelect}
               paperSize={paperSize}
               orientation={orientation}
               pdfBase64={formStructure.pdfBase64}
@@ -434,6 +504,32 @@ const RESIZE_HANDLES: ResizeHandle[] = [
 
 const MIN_CLUSTER_SIZE_PX = 10;
 
+/** Compute screen-to-Excel conversion factors (shared by ResizeHandles and GroupBoundingBox) */
+function useScreenToExcelScale(
+  tableScale: number,
+  usePdfMode: boolean,
+  sheet: SheetStructure,
+  paperDims: { wPx: number; hPx: number; pxPerMm: number },
+  zoom: number
+) {
+  return useMemo(() => {
+    if (usePdfMode && sheet.printMeta) {
+      const paPx = computePrintAreaPx(sheet, sheet.printMeta!);
+      const content = computePdfContentArea(sheet.printMeta!);
+      const pageW = sheet.printMeta!.pdfPageWidthPt;
+      const pageH = sheet.printMeta!.pdfPageHeightPt;
+      return {
+        x: 1 / ((content.width / paPx.width / pageW) * paperDims.wPx * zoom),
+        y: 1 / ((content.height / paPx.height / pageH) * paperDims.hPx * zoom),
+      };
+    }
+    return {
+      x: 1 / (tableScale * zoom),
+      y: 1 / (tableScale * zoom),
+    };
+  }, [tableScale, usePdfMode, sheet, paperDims, zoom]);
+}
+
 function ResizeHandles({
   cluster,
   tableScale,
@@ -442,6 +538,9 @@ function ResizeHandles({
   paperDims,
   zoom,
   onUpdateCluster,
+  onBulkUpdateClusters,
+  selectedIds,
+  allClusters,
 }: {
   cluster: ClusterDefinition;
   tableScale: number;
@@ -450,8 +549,13 @@ function ResizeHandles({
   paperDims: { wPx: number; hPx: number; pxPerMm: number };
   zoom: number;
   onUpdateCluster: (id: string, patch: Partial<ClusterDefinition>) => void;
+  onBulkUpdateClusters: (patches: Map<string, Partial<ClusterDefinition>>) => void;
+  selectedIds: Set<string>;
+  allClusters: ClusterDefinition[];
 }) {
   const [resizingEdges, setResizingEdges] = useState<ResizeEdge[] | null>(null);
+  const scale = useScreenToExcelScale(tableScale, usePdfMode, sheet, paperDims, zoom);
+  const isBulk = selectedIds.size > 1;
 
   const handleMouseDown = useCallback(
     (edges: ResizeEdge[], e: React.MouseEvent) => {
@@ -460,77 +564,66 @@ function ResizeHandles({
 
       const startX = e.clientX;
       const startY = e.clientY;
-      const startRegion = { ...cluster.region };
+      const isMove = edges.length === 4;
+
+      // For bulk move, capture start regions of all selected clusters
+      const startRegions = isMove && isBulk
+        ? new Map(allClusters.filter((c) => selectedIds.has(c.id)).map((c) => [c.id, { ...c.region }]))
+        : new Map([[cluster.id, { ...cluster.region }]]);
 
       setResizingEdges(edges);
 
-      // Compute the conversion factor: screen px -> Excel px
-      // In table mode: excelDelta = screenDelta / (tableScale * zoom)
-      // In PDF mode: need to reverse the PDF mapping
-      let scaleScreenToExcelX: number;
-      let scaleScreenToExcelY: number;
-
-      if (usePdfMode && sheet.printMeta) {
-        // Import dynamically avoided -- use inline reverse mapping
-        // From mapClusterRegionToPdf:
-        //   pdfNorm = (content.left + relX * content.width) / pageW
-        //   screenPx = pdfNorm * paperDims.wPx
-        // Where relX = (excelPx - paPx.left) / paPx.width
-        // So: screenPx = ((content.left + ((excelPx - paPx.left) / paPx.width) * content.width) / pageW) * paperDims.wPx
-        // d(screenPx)/d(excelPx) = (content.width / paPx.width / pageW) * paperDims.wPx
-        // Therefore: excelDelta = screenDelta / ((content.width / paPx.width / pageW) * paperDims.wPx * zoom)
-        const paPx = computePrintAreaPx(sheet, sheet.printMeta!);
-        const content = computePdfContentArea(sheet.printMeta!);
-        const pageW = sheet.printMeta!.pdfPageWidthPt;
-        const pageH = sheet.printMeta!.pdfPageHeightPt;
-
-        scaleScreenToExcelX = 1 / ((content.width / paPx.width / pageW) * paperDims.wPx * zoom);
-        scaleScreenToExcelY = 1 / ((content.height / paPx.height / pageH) * paperDims.hPx * zoom);
-      } else {
-        scaleScreenToExcelX = 1 / (tableScale * zoom);
-        scaleScreenToExcelY = 1 / (tableScale * zoom);
-      }
-
       const handleMouseMove = (ev: MouseEvent) => {
-        const dx = (ev.clientX - startX) * scaleScreenToExcelX;
-        const dy = (ev.clientY - startY) * scaleScreenToExcelY;
+        const dx = (ev.clientX - startX) * scale.x;
+        const dy = (ev.clientY - startY) * scale.y;
 
-        const newRegion = { ...startRegion };
-
-        for (const edge of edges) {
-          switch (edge) {
-            case "top":
-              newRegion.top = startRegion.top + dy;
-              break;
-            case "bottom":
-              newRegion.bottom = startRegion.bottom + dy;
-              break;
-            case "left":
-              newRegion.left = startRegion.left + dx;
-              break;
-            case "right":
-              newRegion.right = startRegion.right + dx;
-              break;
+        if (isMove && isBulk) {
+          // Bulk move: batch update all selected clusters at once
+          const patches = new Map<string, Partial<ClusterDefinition>>();
+          for (const [id, startRegion] of startRegions) {
+            patches.set(id, {
+              region: {
+                top: startRegion.top + dy,
+                bottom: startRegion.bottom + dy,
+                left: startRegion.left + dx,
+                right: startRegion.right + dx,
+              },
+            });
           }
-        }
+          onBulkUpdateClusters(patches);
+        } else {
+          // Single cluster move or resize
+          const startRegion = startRegions.get(cluster.id)!;
+          const newRegion = { ...startRegion };
 
-        // Enforce minimum size
-        if (newRegion.right - newRegion.left < MIN_CLUSTER_SIZE_PX) {
-          if (edges.includes("left")) {
-            newRegion.left = newRegion.right - MIN_CLUSTER_SIZE_PX;
+          if (isMove) {
+            newRegion.top = startRegion.top + dy;
+            newRegion.bottom = startRegion.bottom + dy;
+            newRegion.left = startRegion.left + dx;
+            newRegion.right = startRegion.right + dx;
           } else {
-            newRegion.right = newRegion.left + MIN_CLUSTER_SIZE_PX;
-          }
-        }
-        if (newRegion.bottom - newRegion.top < MIN_CLUSTER_SIZE_PX) {
-          if (edges.includes("top")) {
-            newRegion.top = newRegion.bottom - MIN_CLUSTER_SIZE_PX;
-          } else {
-            newRegion.bottom = newRegion.top + MIN_CLUSTER_SIZE_PX;
-          }
-        }
+            for (const edge of edges) {
+              switch (edge) {
+                case "top": newRegion.top = startRegion.top + dy; break;
+                case "bottom": newRegion.bottom = startRegion.bottom + dy; break;
+                case "left": newRegion.left = startRegion.left + dx; break;
+                case "right": newRegion.right = startRegion.right + dx; break;
+              }
+            }
 
-        onUpdateCluster(cluster.id, { region: newRegion });
+            // Enforce minimum size
+            if (newRegion.right - newRegion.left < MIN_CLUSTER_SIZE_PX) {
+              if (edges.includes("left")) newRegion.left = newRegion.right - MIN_CLUSTER_SIZE_PX;
+              else newRegion.right = newRegion.left + MIN_CLUSTER_SIZE_PX;
+            }
+            if (newRegion.bottom - newRegion.top < MIN_CLUSTER_SIZE_PX) {
+              if (edges.includes("top")) newRegion.top = newRegion.bottom - MIN_CLUSTER_SIZE_PX;
+              else newRegion.bottom = newRegion.top + MIN_CLUSTER_SIZE_PX;
+            }
+          }
+
+          onUpdateCluster(cluster.id, { region: newRegion });
+        }
       };
 
       const handleMouseUp = () => {
@@ -551,7 +644,7 @@ function ResizeHandles({
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [cluster, tableScale, usePdfMode, sheet, paperDims, zoom, onUpdateCluster]
+    [cluster, scale, isBulk, selectedIds, allClusters, onUpdateCluster, onBulkUpdateClusters]
   );
 
   const isCorner = (edges: ResizeEdge[]) => edges.length === 2;
@@ -563,8 +656,8 @@ function ResizeHandles({
         onMouseDown={(e) => handleMouseDown(["top", "bottom", "left", "right"], e)}
         className="absolute inset-1 z-30 cursor-move"
       />
-      {/* Resize handles — corners and edges */}
-      {RESIZE_HANDLES.map((handle, i) => (
+      {/* Resize handles — only for single selection (not bulk) */}
+      {!isBulk && RESIZE_HANDLES.map((handle, i) => (
         <div
           key={i}
           onMouseDown={(e) => handleMouseDown(handle.edges, e)}
@@ -596,6 +689,128 @@ function ResizeHandles({
   );
 }
 
+/** Illustrator-style bounding box around all selected clusters — drag to move the group */
+function GroupBoundingBox({
+  clusters,
+  selectedIds,
+  tableScale,
+  usePdfMode,
+  sheet,
+  paperDims,
+  zoom,
+  onBulkUpdateClusters,
+}: {
+  clusters: ClusterDefinition[];
+  selectedIds: Set<string>;
+  tableScale: number;
+  usePdfMode: boolean;
+  sheet: SheetStructure;
+  paperDims: { wPx: number; hPx: number; pxPerMm: number };
+  zoom: number;
+  onBulkUpdateClusters: (patches: Map<string, Partial<ClusterDefinition>>) => void;
+}) {
+  const scale = useScreenToExcelScale(tableScale, usePdfMode, sheet, paperDims, zoom);
+
+  // Compute bounding box of all selected clusters in screen (paper) coordinates
+  const bounds = useMemo(() => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let count = 0;
+    for (const c of clusters) {
+      if (!selectedIds.has(c.id)) continue;
+      let t: number, l: number, r: number, b: number;
+      if (usePdfMode && sheet.printMeta) {
+        const mapped = mapClusterRegionToPdf(c.region, sheet, sheet.printMeta);
+        if (!mapped) continue;
+        t = mapped.top * paperDims.hPx;
+        l = mapped.left * paperDims.wPx;
+        r = mapped.right * paperDims.wPx;
+        b = mapped.bottom * paperDims.hPx;
+      } else {
+        t = c.region.top * tableScale;
+        l = c.region.left * tableScale;
+        r = c.region.right * tableScale;
+        b = c.region.bottom * tableScale;
+      }
+      minX = Math.min(minX, l);
+      minY = Math.min(minY, t);
+      maxX = Math.max(maxX, r);
+      maxY = Math.max(maxY, b);
+      count++;
+    }
+    if (count < 2) return null;
+    return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+  }, [clusters, selectedIds, usePdfMode, sheet, paperDims, tableScale]);
+
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startRegions = new Map(
+        clusters.filter((c) => selectedIds.has(c.id)).map((c) => [c.id, { ...c.region }])
+      );
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const dx = (ev.clientX - startX) * scale.x;
+        const dy = (ev.clientY - startY) * scale.y;
+        const patches = new Map<string, Partial<ClusterDefinition>>();
+        for (const [id, startRegion] of startRegions) {
+          patches.set(id, {
+            region: {
+              top: startRegion.top + dy,
+              bottom: startRegion.bottom + dy,
+              left: startRegion.left + dx,
+              right: startRegion.right + dx,
+            },
+          });
+        }
+        onBulkUpdateClusters(patches);
+      };
+
+      const handleMouseUp = () => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.body.style.cursor = "move";
+      document.body.style.userSelect = "none";
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [clusters, selectedIds, scale, onBulkUpdateClusters]
+  );
+
+  if (!bounds) return null;
+
+  const pad = 6; // padding around the group
+  return (
+    <div
+      data-group-box
+      onMouseDown={handleMouseDown}
+      className="absolute z-40 cursor-move"
+      style={{
+        left: bounds.left - pad,
+        top: bounds.top - pad,
+        width: bounds.width + pad * 2,
+        height: bounds.height + pad * 2,
+      }}
+    >
+      {/* Dashed border */}
+      <div
+        className="absolute inset-0 rounded border-2 border-dashed border-blue-400/70 bg-blue-50/10 pointer-events-none"
+      />
+      {/* Selection count badge */}
+      <div className="absolute -top-5 left-1/2 -translate-x-1/2 rounded-full bg-blue-500 px-2 py-0.5 text-[9px] font-bold text-white shadow-sm pointer-events-none whitespace-nowrap">
+        {selectedIds.size} 件選択中
+      </div>
+    </div>
+  );
+}
+
 // ─── Visual Preview ──────────────────────────────────────────────────────────
 
 function VisualPreview({
@@ -606,6 +821,8 @@ function VisualPreview({
   onClusterClick,
   onContextMenu,
   onUpdateCluster,
+  onBulkUpdateClusters,
+  onRubberBandSelect,
   paperSize,
   orientation,
   pdfBase64,
@@ -619,6 +836,8 @@ function VisualPreview({
   onClusterClick: (id: string, e: React.MouseEvent) => void;
   onContextMenu: (id: string, e: React.MouseEvent) => void;
   onUpdateCluster: (id: string, patch: Partial<ClusterDefinition>) => void;
+  onBulkUpdateClusters: (patches: Map<string, Partial<ClusterDefinition>>) => void;
+  onRubberBandSelect: (ids: Set<string>) => void;
   paperSize: "A4" | "A3" | "B4";
   orientation: "portrait" | "landscape";
   pdfBase64?: string;
@@ -740,7 +959,87 @@ function VisualPreview({
     return { grid, merged };
   }, [sheet.cells, usePdfMode]);
 
-  // Drag-to-move state
+  // Rubber band selection
+  const [rubberBand, setRubberBand] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+
+  // Track whether a rubber band selection just occurred (to suppress background deselect)
+  const justRubberBandedRef = useRef(false);
+
+  const handleRubberBandStart = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      // Skip if the click target is a cluster overlay or interactive element (move/resize handle)
+      const el = e.target as HTMLElement;
+      if (el.closest("[data-cluster-id]") || el.closest("[data-group-box]")) return;
+
+      const containerEl = containerRef.current;
+      if (!containerEl) return;
+      const rect = containerEl.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / zoom;
+      const y = (e.clientY - rect.top) / zoom;
+
+      setRubberBand({ startX: x, startY: y, endX: x, endY: y });
+
+      const handleMouseMove = (ev: MouseEvent) => {
+        const mx = (ev.clientX - rect.left) / zoom;
+        const my = (ev.clientY - rect.top) / zoom;
+        setRubberBand((prev) => prev ? { ...prev, endX: mx, endY: my } : null);
+      };
+
+      const handleMouseUp = (ev: MouseEvent) => {
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+
+        const mx = (ev.clientX - rect.left) / zoom;
+        const my = (ev.clientY - rect.top) / zoom;
+
+        // Calculate selection rect in paper coordinates
+        const selLeft = Math.min(x, mx);
+        const selRight = Math.max(x, mx);
+        const selTop = Math.min(y, my);
+        const selBottom = Math.max(y, my);
+
+        // Only select if the drag was significant (> 5px)
+        if (selRight - selLeft > 5 || selBottom - selTop > 5) {
+          const hitIds = new Set<string>();
+          for (const c of clusters) {
+            let cTop: number, cLeft: number, cRight: number, cBottom: number;
+
+            if (usePdfMode && sheet.printMeta) {
+              const mapped = mapClusterRegionToPdf(c.region, sheet, sheet.printMeta);
+              if (!mapped) continue;
+              cTop = mapped.top * paperDims.hPx;
+              cLeft = mapped.left * paperDims.wPx;
+              cRight = mapped.right * paperDims.wPx;
+              cBottom = mapped.bottom * paperDims.hPx;
+            } else {
+              cTop = c.region.top * tableScale;
+              cLeft = c.region.left * tableScale;
+              cRight = c.region.right * tableScale;
+              cBottom = c.region.bottom * tableScale;
+            }
+
+            // Check overlap between rubber band rect and cluster rect
+            if (cLeft < selRight && cRight > selLeft && cTop < selBottom && cBottom > selTop) {
+              hitIds.add(c.id);
+            }
+          }
+          if (hitIds.size > 0) {
+            onRubberBandSelect(hitIds);
+            // Prevent the parent background click from immediately deselecting
+            justRubberBandedRef.current = true;
+            setTimeout(() => { justRubberBandedRef.current = false; }, 0);
+          }
+        }
+
+        setRubberBand(null);
+      };
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [clusters, zoom, usePdfMode, sheet, paperDims, tableScale, onRubberBandSelect]
+  );
 
   // Cluster overlay renderer (shared between both modes)
   const renderCluster = (cluster: ClusterDefinition) => {
@@ -769,6 +1068,7 @@ function VisualPreview({
     return (
       <div
         key={cluster.id}
+        data-cluster-id={cluster.id}
         onClick={(e) => onClusterClick(cluster.id, e)}
         onContextMenu={(e) => onContextMenu(cluster.id, e)}
         className="absolute cursor-default transition-all duration-150"
@@ -810,8 +1110,12 @@ function VisualPreview({
             paperDims={paperDims}
             zoom={zoom}
             onUpdateCluster={onUpdateCluster}
+            onBulkUpdateClusters={onBulkUpdateClusters}
+            selectedIds={selectedIds}
+            allClusters={clusters}
           />
         )}
+        {/* Multi-selected non-primary clusters: group drag handled by GroupBoundingBox */}
       </div>
     );
   };
@@ -823,9 +1127,16 @@ function VisualPreview({
         height: paperDims.hPx * zoom,
         flexShrink: 0,
       }}
+      onClick={(e) => {
+        // Suppress parent background click after rubber band selection
+        if (justRubberBandedRef.current) {
+          e.stopPropagation();
+        }
+      }}
     >
     <div
       ref={containerRef}
+      onMouseDown={handleRubberBandStart}
       className="bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out"
       style={{
         width: paperDims.wPx,
@@ -834,12 +1145,36 @@ function VisualPreview({
         transformOrigin: "top center",
       }}
     >
+      {/* Rubber band selection overlay */}
+      {rubberBand && (() => {
+        const x = Math.min(rubberBand.startX, rubberBand.endX);
+        const y = Math.min(rubberBand.startY, rubberBand.endY);
+        const w = Math.abs(rubberBand.endX - rubberBand.startX);
+        const h = Math.abs(rubberBand.endY - rubberBand.startY);
+        return (
+          <div
+            className="absolute pointer-events-none z-50 border-2 border-blue-400 bg-blue-100/20 rounded-sm"
+            style={{ left: x, top: y, width: w, height: h }}
+          />
+        );
+      })()}
       {usePdfMode ? (
         <>
           {/* PDF background */}
           <canvas ref={canvasRef} className="absolute top-0 left-0" />
           {/* Cluster overlays — positioned relative to the full PDF page */}
           {clusters.map(renderCluster)}
+          {/* Group bounding box for multi-selection */}
+          <GroupBoundingBox
+            clusters={clusters}
+            selectedIds={selectedIds}
+            tableScale={tableScale}
+            usePdfMode={usePdfMode}
+            sheet={sheet}
+            paperDims={paperDims}
+            zoom={zoom}
+            onBulkUpdateClusters={onBulkUpdateClusters}
+          />
         </>
       ) : (
         <>
@@ -900,6 +1235,17 @@ function VisualPreview({
               </table>
             </div>
             {clusters.map(renderCluster)}
+            {/* Group bounding box for multi-selection */}
+            <GroupBoundingBox
+              clusters={clusters}
+              selectedIds={selectedIds}
+              tableScale={tableScale}
+              usePdfMode={usePdfMode}
+              sheet={sheet}
+              paperDims={paperDims}
+              zoom={zoom}
+              onBulkUpdateClusters={onBulkUpdateClusters}
+            />
           </div>
         </>
       )}

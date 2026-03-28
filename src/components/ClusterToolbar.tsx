@@ -14,6 +14,7 @@ type Props = {
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onBulkDelete: () => void;
+  onNudge: (dx: number, dy: number) => void;
 };
 
 const TYPE_LABELS: Record<ClusterTypeName, string> = {
@@ -40,6 +41,7 @@ export default function ClusterToolbar({
   onSelectAll,
   onDeselectAll,
   onBulkDelete,
+  onNudge,
 }: Props) {
   // Type counts
   const typeCounts = new Map<string, number>();
@@ -114,6 +116,52 @@ export default function ClusterToolbar({
               削除{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
             </span>
           </button>
+
+          {/* Nudge buttons */}
+          <div className="flex items-center gap-0.5 ml-1" title="選択中のクラスターを移動 (矢印キーでも操作可)">
+            <button
+              onClick={() => onNudge(-1, 0)}
+              disabled={selectedIds.size === 0}
+              className="rounded-lg p-1.5 text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 transition-colors"
+              title="左に移動 (←)"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className="flex flex-col gap-0">
+              <button
+                onClick={() => onNudge(0, -1)}
+                disabled={selectedIds.size === 0}
+                className="rounded-lg p-0.5 text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 transition-colors"
+                title="上に移動 (↑)"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={() => onNudge(0, 1)}
+                disabled={selectedIds.size === 0}
+                className="rounded-lg p-0.5 text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 transition-colors"
+                title="下に移動 (↓)"
+              >
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
+            <button
+              onClick={() => onNudge(1, 0)}
+              disabled={selectedIds.size === 0}
+              className="rounded-lg p-1.5 text-slate-500 cursor-pointer hover:bg-blue-50 hover:text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-500 transition-colors"
+              title="右に移動 (→)"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
 
           {/* Undo / Redo (placeholder) */}
           <div className="flex items-center gap-0.5 ml-1">
