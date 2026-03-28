@@ -10,7 +10,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --loader ./test-loader.mjs --test src/lib/**/*.test.ts",
-    "test:cli": "node --experimental-strip-types --loader ./test-loader.mjs --test src/lib/template-inspector.test.ts src/lib/xml-validator.test.ts src/lib/template-diff.test.ts"
+    "test:cli": "node --experimental-strip-types --loader ./test-loader.mjs --test src/lib/template-inspector.test.ts src/lib/xml-validator.test.ts src/lib/template-diff.test.ts",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",
@@ -32,7 +35,9 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "playwright": "^1.58.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitepress": "^1.6.4"
   }
 }
