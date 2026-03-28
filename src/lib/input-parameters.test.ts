@@ -87,7 +87,7 @@ test("parse → serialize ラウンドトリップ (;; エスケープ)", () => 
 
 // ─── PARAMETER_SCHEMAS ──────────────────────────────────────────────────────
 
-test("MVP + Tier 1/2 全型のスキーマが定義されている", () => {
+test("全38型のスキーマが定義されている", () => {
   const expected = [
     // MVP
     "KeyboardText", "InputNumeric", "Date", "Time",
@@ -98,12 +98,28 @@ test("MVP + Tier 1/2 全型のスキーマが定義されている", () => {
     "Numeric", "NumberHours", "TimeCalculate",
     "Registration", "RegistrationDate", "LatestUpdate", "LatestUpdateDate",
     "QRCode", "CodeReader", "LoginUser",
+    // Tier 3
+    "FreeText", "FreeDraw", "MultipleChoiceNumber", "MCNCalculate",
+    "Gps", "SelectMaster", "DrawingImage", "DrawingPinNo", "PinItemTableNo",
+    "Scandit", "EdgeOCR",
+    // 仕様待ちだった型
+    "Action", "AudioRecording",
   ];
   for (const name of expected) {
     assert.ok(PARAMETER_SCHEMAS[name], `${name} のスキーマがない`);
     assert.ok(PARAMETER_SCHEMAS[name].fields.length > 0, `${name} のフィールドが空`);
   }
   assert.equal(Object.keys(PARAMETER_SCHEMAS).length, expected.length, "スキーマ数が合わない");
+});
+
+test("Action スキーマは56フィールド", () => {
+  assert.equal(PARAMETER_SCHEMAS["Action"].fields.length, 56);
+});
+
+test("AudioRecording スキーマは Recorded* キー群を含む", () => {
+  const fields = PARAMETER_SCHEMAS["AudioRecording"].fields;
+  const recordedKeys = fields.filter((f) => f.key.startsWith("Recorded"));
+  assert.ok(recordedKeys.length >= 10, `Recorded* キーが ${recordedKeys.length} 個しかない`);
 });
 
 test("各スキーマのフィールドに key, type, defaultValue, label がある", () => {

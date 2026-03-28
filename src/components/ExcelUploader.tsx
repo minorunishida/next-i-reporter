@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { FormStructure } from "@/lib/form-structure";
+import type { FormStructure, AnalysisResult } from "@/lib/form-structure";
 
 type Props = {
   onParsed: (data: FormStructure) => void;
+  onImported?: (data: AnalysisResult) => void;
 };
 
-export default function ExcelUploader({ onParsed }: Props) {
+export default function ExcelUploader({ onParsed, onImported }: Props) {
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,9 +18,12 @@ export default function ExcelUploader({ onParsed }: Props) {
       setLoading(true);
       setError(null);
       try {
+        const isXml = file.name.endsWith(".xml");
         const formData = new FormData();
         formData.append("file", file);
-        const res = await fetch("/api/parse-excel", {
+
+        const endpoint = isXml ? "/api/import-xml" : "/api/parse-excel";
+        const res = await fetch(endpoint, {
           method: "POST",
           body: formData,
         });
@@ -27,15 +31,21 @@ export default function ExcelUploader({ onParsed }: Props) {
           const body = await res.json();
           throw new Error(body.error ?? "解析に失敗しました");
         }
-        const data: FormStructure = await res.json();
-        onParsed(data);
+
+        if (isXml && onImported) {
+          const data: AnalysisResult = await res.json();
+          onImported(data);
+        } else {
+          const data: FormStructure = await res.json();
+          onParsed(data);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : "エラーが発生しました");
       } finally {
         setLoading(false);
       }
     },
-    [onParsed]
+    [onParsed, onImported]
   );
 
   const handleDrop = useCallback(
@@ -88,17 +98,17 @@ export default function ExcelUploader({ onParsed }: Props) {
             </svg>
             <div className="text-center">
               <p className="text-sm text-slate-600">
-                Excel ファイルをドロップ、または<label className="text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer"> ファイルを選択
+                ファイルをドロップ、または<label className="text-indigo-600 hover:text-indigo-700 font-medium cursor-pointer"> ファイルを選択
                   <input
                     type="file"
-                    accept=".xlsx,.xls"
+                    accept=".xlsx,.xls,.xml"
                     onChange={handleFileInput}
                     className="hidden"
                   />
                 </label>
               </p>
               <p className="mt-1.5 text-xs text-slate-400">
-                対応形式: .xlsx, .xls
+                対応形式: .xlsx, .xls, .xml (ConMas)
               </p>
             </div>
           </>

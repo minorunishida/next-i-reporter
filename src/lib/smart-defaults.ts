@@ -258,6 +258,87 @@ const TYPE_DEFAULTS: TypeDefaults[] = [
     fallback:
       "Required=0;AutoInput=0;FirstOnly=0;DisplayUserName=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
   },
+
+  // ─── Tier 3 ───────────────────────────────────────────────────────────────
+
+  // FreeText (10)
+  {
+    typeCode: CLUSTER_TYPES_FULL["FreeText"],
+    rules: [],
+    fallback: "Width=3;Color=0,0,0",
+  },
+  // FreeDraw (15)
+  {
+    typeCode: CLUSTER_TYPES_FULL["FreeDraw"],
+    rules: [],
+    fallback: "Width=3;Color=0,0,0;IsOriginal=0;ImageSize=0",
+  },
+  // MultipleChoiceNumber (123)
+  {
+    typeCode: CLUSTER_TYPES_FULL["MultipleChoiceNumber"],
+    rules: [],
+    fallback: "ClearOption=0",
+  },
+  // MCNCalculate (124)
+  {
+    typeCode: CLUSTER_TYPES_FULL["MCNCalculate"],
+    rules: [],
+    fallback: "Decimal=0;Comma=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // Gps (120)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Gps"],
+    rules: [],
+    fallback: "Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // SelectMaster (125)
+  {
+    typeCode: CLUSTER_TYPES_FULL["SelectMaster"],
+    rules: [],
+    fallback: "GatewayMode=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // DrawingImage (128)
+  {
+    typeCode: CLUSTER_TYPES_FULL["DrawingImage"],
+    rules: [],
+    fallback: "EnableShortcut=0;Locked=0",
+  },
+  // DrawingPinNo (129)
+  {
+    typeCode: CLUSTER_TYPES_FULL["DrawingPinNo"],
+    rules: [],
+    fallback: "PinNoType=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // PinItemTableNo (130)
+  {
+    typeCode: CLUSTER_TYPES_FULL["PinItemTableNo"],
+    rules: [],
+    fallback: "Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // Scandit (132)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Scandit"],
+    rules: [],
+    fallback: "ScanditMode=0;IsNumeric=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // EdgeOCR (133)
+  {
+    typeCode: CLUSTER_TYPES_FULL["EdgeOCR"],
+    rules: [],
+    fallback: "IsNumeric=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // Action (126)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Action"],
+    rules: [],
+    fallback: "ActionType=0;ButtonFont=MS Gothic;ButtonFontSize=11;ButtonWeight=Normal;ButtonFontColor=0,0,0",
+  },
+  // AudioRecording (131)
+  {
+    typeCode: CLUSTER_TYPES_FULL["AudioRecording"],
+    rules: [],
+    fallback: "Required=0;RecordingTime=60;DisplayMode=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
 ];
 
 // typeCode → TypeDefaults のルックアップマップ

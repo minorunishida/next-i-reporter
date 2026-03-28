@@ -21,6 +21,7 @@ import {
 import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
 import ClusterToolbar from "./ClusterToolbar";
 import CreateClusterPopover from "./CreateClusterPopover";
+import ParameterEditor from "./ParameterEditor";
 import type { RegionAnalysisResult } from "@/lib/ai-analyzer";
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -1585,6 +1586,18 @@ function PropertyPanel({
           </div>
         </div>
       )}
+
+      {/* inputParameters editor */}
+      <div className="px-4 py-3">
+        <label className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          パラメータ
+        </label>
+        <ParameterEditor
+          typeName={cluster.typeName}
+          inputParameters={cluster.inputParameters}
+          onChange={(newParams) => onUpdate({ inputParameters: newParams })}
+        />
+      </div>
 
       {/* Region info */}
       <div className="px-4 py-3">

@@ -37,6 +37,13 @@ export default function Home() {
     setStep("preview");
   }, []);
 
+  const handleImported = useCallback((data: AnalysisResult) => {
+    setFormStructure(data.formStructure);
+    setAnalysisResult(data);
+    setError(null);
+    setStep("result");
+  }, []);
+
   const handleAnalyze = useCallback(async () => {
     if (!formStructure) return;
     setStep("analyzing");
@@ -208,7 +215,7 @@ export default function Home() {
                 Excel to ConMas i-Reporter
               </p>
             </div>
-            <ExcelUploader onParsed={handleParsed} />
+            <ExcelUploader onParsed={handleParsed} onImported={handleImported} />
           </section>
         )}
 
