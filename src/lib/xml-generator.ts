@@ -148,14 +148,20 @@ export function generateConmasXml(result: AnalysisResult): string {
   p("    <editStatus>0</editStatus>");
   p("    <publicStatus>0</publicStatus>");
   p("    <picOriginalResolution>0</picOriginalResolution>");
-  p("    <imageSize>0</imageSize>");
+  p("    <imageSize></imageSize>");
   p("    <isOriginalWhole>1</isOriginalWhole>");
-  p("    <wholeImageSize>0</wholeImageSize>");
-  p("    <saveIndividuallyImage>0</saveIndividuallyImage>");
+  p("    <wholeImageSize></wholeImageSize>");
+  p("    <saveIndividuallyImage>1</saveIndividuallyImage>");
+  // 定義ファイル: Excel バイナリを Base64 で埋め込む (仕様: spec-excel-binary-in-conmas-xml.md)
+  const excelBase64 = formStructure.excelBase64 ?? "";
+  const excelExt = excelBase64
+    ? (formStructure.fileName.split(".").pop()?.toLowerCase() ?? "xlsx")
+    : "";
+  const excelName = excelBase64 ? formStructure.fileName : "";
   p("    <definitionFile>");
-  p("      <type></type>");
-  p("      <name></name>");
-  p("      <value></value>");
+  p(`      <type>${excelExt}</type>`);
+  p(`      <name>${esc(excelName)}</name>`);
+  p(`      <value>${excelBase64}</value>`);
   p("    </definitionFile>");
   // 背景PDF: Graph API で変換した実PDFがあればそれを使用、なければブランクPDF
   const pdfBase64 = formStructure.pdfBase64 || generateBlankPdfBase64(formStructure.sheets.length);
@@ -425,7 +431,10 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
   for (let i = 1; i <= 10; i++) {
     p(`          <remarksValue${i}></remarksValue${i}>`);
   }
-  p(`          <cellAddress>${esc(c.cellAddress)}</cellAddress>`);
+  // cellAddress は空にする: Designer の定義出力時に COM Range アクセスで
+  // 0x800A03EC エラーを起こすため。空なら §3.4 でスキップされる。
+  // 将来的に Excel セル構造と完全一致する cellAddress 生成ができれば復活する。
+  p("          <cellAddress></cellAddress>");
   p("          <management>");
   p("            <valueToRemarks></valueToRemarks>");
   p("            <valueToSystemKeys></valueToSystemKeys>");
@@ -433,6 +442,57 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
   p("        </cluster>");
 
   return L;
+}
+
+/**
+ * セルアドレスを Designer 準拠の絶対参照形式に変換
+ * "B4" → "$B$4", 結合セルなら "$B$4:$C$5"
+ *
+ * sheet.cells に該当セルが存在し、かつ値・数式・結合・罫線のいずれかを持つ場合のみ
+ * アドレスを返す。空セル（装飾のみ）は空を返す (仕様 §3.4: 空ならスキップ → COM エラー回避)
+ */
+function toAbsoluteCellAddress(addr: string, sheet: SheetStructure): string {
+  if (!addr) return "";
+
+  // $ を除去して正規化 (インポート時に $ 付きで入る場合がある)
+  const normalized = addr.replace(/\$/g, "").split(":")[0];
+
+  // sheet.cells から該当セルを検索
+  const cell = sheet.cells.find((c) => c.address === normalized);
+  if (!cell) return "";
+
+  // 値・数式・結合・データ入力規則のいずれかを持つセルのみ有効
+  const hasContent = !!(cell.value || cell.formula || cell.isMerged || cell.dataValidation);
+  if (!hasContent) return "";
+
+  if (cell.isMerged && cell.mergeRange) {
+    const { startRow, startCol, endRow, endCol } = cell.mergeRange;
+    const startAddr = toAbsoluteRef(startCol, startRow);
+    const endAddr = toAbsoluteRef(endCol, endRow);
+    return startAddr === endAddr ? startAddr : `${startAddr}:${endAddr}`;
+  }
+
+  // 単一セル: "B4" → "$B$4"
+  return toAbsoluteRef(normalized);
+}
+
+/** "B4" → "$B$4", or (col, row) → "$B$4" */
+function toAbsoluteRef(colOrAddr: string | number, row?: number): string {
+  if (typeof colOrAddr === "number" && row !== undefined) {
+    // 0-based col/row → "$A$1" 形式
+    let col = colOrAddr;
+    let colStr = "";
+    do {
+      colStr = String.fromCharCode(65 + (col % 26)) + colStr;
+      col = Math.floor(col / 26) - 1;
+    } while (col >= 0);
+    return `$${colStr}$${row + 1}`;
+  }
+  // "B4" → "$B$4"
+  const addr = String(colOrAddr);
+  const m = addr.match(/^([A-Za-z]+)(\d+)$/);
+  if (!m) return addr;
+  return `$${m[1].toUpperCase()}$${m[2]}`;
 }
 
 export function esc(s: string): string {

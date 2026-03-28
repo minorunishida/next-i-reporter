@@ -67,6 +67,12 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
   const defTopName = getTagText(top, "defTopName") || "Imported";
   const pdfBase64 = getTagText(top, "backgroundImage") || undefined;
 
+  // definitionFile: Excel バイナリ復元
+  const defFileMatch = top.match(/<definitionFile>([\s\S]*?)<\/definitionFile>/);
+  const defFileBlock = defFileMatch ? defFileMatch[1] : "";
+  const excelBase64 = defFileBlock ? (getTagText(defFileBlock, "value") || undefined) : undefined;
+  const excelFileName = defFileBlock ? (getTagText(defFileBlock, "name") || undefined) : undefined;
+
   // sheets パース
   const sheetsMatch = top.match(/<sheets>([\s\S]*)<\/sheets>/);
   const sheetsXml = sheetsMatch ? sheetsMatch[1] : "";
@@ -145,9 +151,10 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
   }
 
   const formStructure: FormStructure = {
-    fileName: fileName || `${defTopName}.xml`,
+    fileName: fileName || excelFileName || `${defTopName}.xml`,
     sheets,
     pdfBase64,
+    excelBase64,
   };
 
   const highConfidence = allClusters.filter((c) => c.confidence >= 0.9).length;

@@ -49,8 +49,8 @@ export default function Home() {
     setStep("analyzing");
     setError(null);
     try {
-      // AI に送る際は pdfBase64 を除外 (トークン節約)
-      const { pdfBase64: _pdf, ...formForAi } = formStructure;
+      // AI に送る際は pdfBase64/excelBase64 を除外 (トークン節約)
+      const { pdfBase64: _pdf, excelBase64: _xls, ...formForAi } = formStructure;
       const res = await fetch("/api/ai-analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -63,6 +63,7 @@ export default function Home() {
       const result: AnalysisResult = await res.json();
       // pdfBase64 を復元 (XML 生成時に必要)
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
+      result.formStructure.excelBase64 = formStructure.excelBase64;
       setAnalysisResult(result);
       setStep("result");
       // 派手なクラッカー演出（3連発）
@@ -115,6 +116,7 @@ export default function Home() {
       }
       const result: AnalysisResult = await res.json();
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
+      result.formStructure.excelBase64 = formStructure.excelBase64;
       setAnalysisResult(result);
       setStep("result");
     } catch (e) {

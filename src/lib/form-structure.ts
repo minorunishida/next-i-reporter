@@ -116,7 +116,8 @@ export type SheetStructure = {
 export type FormStructure = {
   fileName: string;
   sheets: SheetStructure[];
-  pdfBase64?: string; // Graph API で変換した背景PDF (Base64)
+  pdfBase64?: string;     // 背景PDF (Base64) — プレビュー・座標表示用
+  excelBase64?: string;   // Excel定義ファイル (Base64) — 計算式・出力マッピング用
 };
 
 // --- クラスター定義 (AI 推論結果) ---

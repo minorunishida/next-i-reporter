@@ -11,7 +11,9 @@
       "Bash(npx vitepress:*)",
       "Bash(grep -E \"README|\\\\.md$\")",
       "Bash(wc -l /c/Users/minoru.nishida/Documents/dev/next-i-reporter/src/lib/*.ts)",
-      "Bash(find /c/Users/minoru.nishida/Documents/dev/next-i-reporter/docs -type f -name *.md)"
+      "Bash(find /c/Users/minoru.nishida/Documents/dev/next-i-reporter/docs -type f -name *.md)",
+      "Bash(find \"C:/Users/minoru.nishida/Downloads/conmas-external-cluster-docs \\(1\\)\" -name \"*.md\")",
+      "Bash(head -80 \"c:/Users/minoru.nishida/Downloads/修理報告書_conmas \\(4\\).xml\")"
     ]
   }
 }
