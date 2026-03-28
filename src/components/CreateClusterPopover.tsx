@@ -1,20 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CLUSTER_TYPES } from "@/lib/form-structure";
+import { CLUSTER_TYPES_FULL } from "@/lib/form-structure";
 import type { ClusterTypeName } from "@/lib/form-structure";
+import {
+  TYPE_LABELS_JA,
+  CLUSTER_TYPE_REGISTRY,
+  CATEGORY_LABELS_JA,
+  type ClusterCategory,
+  type ClusterTypeEntry,
+} from "@/lib/cluster-type-registry";
 
-const TYPE_LABELS: Record<ClusterTypeName, string> = {
-  KeyboardText: "テキスト入力",
-  Date: "日付",
-  Time: "時刻",
-  InputNumeric: "数値入力",
-  Calculate: "計算式",
-  Select: "選択",
-  Check: "チェック",
-  Image: "画像",
-  Handwriting: "手書き",
-};
+const TYPE_LABELS = TYPE_LABELS_JA;
 
 type AiResult = {
   name: string;
@@ -82,7 +79,7 @@ export default function CreateClusterPopover({
     onConfirm({
       name,
       typeName,
-      type: CLUSTER_TYPES[typeName],
+      type: CLUSTER_TYPES_FULL[typeName],
       inputParameters,
       readOnly,
       cellAddress,
@@ -175,9 +172,20 @@ export default function CreateClusterPopover({
                 onChange={(e) => setTypeName(e.target.value as ClusterTypeName)}
                 className="mt-0.5 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100"
               >
-                {(Object.keys(TYPE_LABELS) as ClusterTypeName[]).map((t) => (
-                  <option key={t} value={t}>{TYPE_LABELS[t]} ({CLUSTER_TYPES[t]})</option>
-                ))}
+                {(() => {
+                  const grouped = new Map<ClusterCategory, ClusterTypeEntry[]>();
+                  for (const entry of CLUSTER_TYPE_REGISTRY) {
+                    if (!grouped.has(entry.category)) grouped.set(entry.category, []);
+                    grouped.get(entry.category)!.push(entry);
+                  }
+                  return Array.from(grouped.entries()).map(([cat, entries]) => (
+                    <optgroup key={cat} label={CATEGORY_LABELS_JA[cat]}>
+                      {entries.map((e) => (
+                        <option key={e.name} value={e.name}>{e.displayNameJa} ({e.value})</option>
+                      ))}
+                    </optgroup>
+                  ));
+                })()}
               </select>
             </div>
 

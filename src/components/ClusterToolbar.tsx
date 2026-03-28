@@ -1,6 +1,13 @@
 "use client";
 
 import type { ClusterDefinition, ClusterTypeName } from "@/lib/form-structure";
+import {
+  TYPE_LABELS_JA,
+  CLUSTER_TYPE_REGISTRY,
+  CATEGORY_LABELS_JA,
+  type ClusterCategory,
+  type ClusterTypeEntry,
+} from "@/lib/cluster-type-registry";
 
 type Props = {
   clusters: ClusterDefinition[];
@@ -19,17 +26,7 @@ type Props = {
   onNudge: (dx: number, dy: number) => void;
 };
 
-const TYPE_LABELS: Record<ClusterTypeName, string> = {
-  KeyboardText: "テキスト入力",
-  Date: "日付",
-  Time: "時刻",
-  InputNumeric: "数値入力",
-  Calculate: "計算式",
-  Select: "選択",
-  Check: "チェック",
-  Image: "画像",
-  Handwriting: "手書き",
-};
+const TYPE_LABELS = TYPE_LABELS_JA;
 
 export default function ClusterToolbar({
   clusters,
@@ -114,7 +111,7 @@ export default function ClusterToolbar({
                   key={type}
                   className="inline-flex items-center gap-1 rounded-md bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200/60"
                 >
-                  {TYPE_LABELS[type as ClusterTypeName] ?? type}
+                  {TYPE_LABELS[type] ?? type}
                   <span className="font-semibold text-slate-700">{count}</span>
                 </span>
               ))}
@@ -247,11 +244,22 @@ export default function ClusterToolbar({
           className="rounded-lg border border-slate-200 bg-slate-50/50 px-2.5 py-1.5 text-xs text-slate-700 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
         >
           <option value="all">全タイプ</option>
-          {(Object.keys(TYPE_LABELS) as ClusterTypeName[]).map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABELS[t]} {typeCounts.get(t) ? `(${typeCounts.get(t)})` : ""}
-            </option>
-          ))}
+          {(() => {
+            const grouped = new Map<ClusterCategory, ClusterTypeEntry[]>();
+            for (const entry of CLUSTER_TYPE_REGISTRY) {
+              if (!grouped.has(entry.category)) grouped.set(entry.category, []);
+              grouped.get(entry.category)!.push(entry);
+            }
+            return Array.from(grouped.entries()).map(([cat, entries]) => (
+              <optgroup key={cat} label={CATEGORY_LABELS_JA[cat]}>
+                {entries.map((e) => (
+                  <option key={e.name} value={e.name}>
+                    {e.displayNameJa} {typeCounts.get(e.name) ? `(${typeCounts.get(e.name)})` : ""}
+                  </option>
+                ))}
+              </optgroup>
+            ));
+          })()}
         </select>
 
         {/* Filter by confidence */}

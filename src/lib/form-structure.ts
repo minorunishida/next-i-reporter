@@ -120,7 +120,17 @@ export type FormStructure = {
 };
 
 // --- クラスター定義 (AI 推論結果) ---
+// 型レジストリから導出 — 後方互換のため旧 CLUSTER_TYPES も維持
 
+import { CLUSTER_TYPE_REGISTRY, type ClusterTypeName } from "./cluster-type-registry";
+export type { ClusterTypeName } from "./cluster-type-registry";
+
+/** 全38型の name→value マップ */
+export const CLUSTER_TYPES_FULL = Object.fromEntries(
+  CLUSTER_TYPE_REGISTRY.map((e) => [e.name, e.value]),
+) as Record<string, number>;
+
+/** 後方互換: MVP 9型のみ (既存コードが参照) */
 export const CLUSTER_TYPES = {
   KeyboardText: 30,
   Date: 40,
@@ -132,8 +142,6 @@ export const CLUSTER_TYPES = {
   Image: 100,
   Handwriting: 119,
 } as const;
-
-export type ClusterTypeName = keyof typeof CLUSTER_TYPES;
 
 /** AI が推測したクラスター（帳票上の入力項目）の定義 */
 export type ClusterDefinition = {

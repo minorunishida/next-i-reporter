@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applySmartDefaults, hasDetailedParameters, getSmartDefault } from "./smart-defaults.ts";
 import type { ClusterDefinition } from "./form-structure.ts";
-import { CLUSTER_TYPES } from "./form-structure.ts";
+import { CLUSTER_TYPES, CLUSTER_TYPES_FULL } from "./form-structure.ts";
 
 function makeCluster(overrides: Partial<ClusterDefinition>): ClusterDefinition {
   return {
@@ -108,4 +108,81 @@ test("applySmartDefaults: mixed clusters each get appropriate defaults", () => {
   assert.ok(result[0].inputParameters.includes("Required=1"));
   assert.ok(result[1].inputParameters.includes("Comma=1"));
   assert.ok(result[2].inputParameters.includes("Required=0"));
+});
+
+// --- Tier 1 新型 ---
+
+test("getSmartDefault: FixedText returns fallback with Lines", () => {
+  const result = getSmartDefault("メモ欄", CLUSTER_TYPES_FULL["FixedText"]);
+  assert.ok(result);
+  assert.ok(result.includes("Lines=1"));
+  assert.ok(result.includes("Width=3"));
+});
+
+test("getSmartDefault: MultiSelect returns Display=Dropdown", () => {
+  const result = getSmartDefault("該当項目", CLUSTER_TYPES_FULL["MultiSelect"]);
+  assert.ok(result);
+  assert.ok(result.includes("Display=Dropdown"));
+});
+
+test("getSmartDefault: CalendarDate returns DateFormat", () => {
+  const result = getSmartDefault("実施日", CLUSTER_TYPES_FULL["CalendarDate"]);
+  assert.ok(result);
+  assert.ok(result.includes("DateFormat=yyyy/MM/dd"));
+});
+
+test("getSmartDefault: Create returns Required=1", () => {
+  const result = getSmartDefault("作成", CLUSTER_TYPES_FULL["Create"]);
+  assert.ok(result);
+  assert.ok(result.includes("Required=1"));
+});
+
+test("getSmartDefault: Inspect returns SignType", () => {
+  const result = getSmartDefault("査閲", CLUSTER_TYPES_FULL["Inspect"]);
+  assert.ok(result);
+  assert.ok(result.includes("SignType=0"));
+});
+
+test("getSmartDefault: Approve returns QuickSave", () => {
+  const result = getSmartDefault("承認", CLUSTER_TYPES_FULL["Approve"]);
+  assert.ok(result);
+  assert.ok(result.includes("QuickSave=0"));
+});
+
+// --- Tier 2 新型 ---
+
+test("getSmartDefault: Numeric returns Stepping", () => {
+  const result = getSmartDefault("数量", CLUSTER_TYPES_FULL["Numeric"]);
+  assert.ok(result);
+  assert.ok(result.includes("Stepping=1"));
+});
+
+test("getSmartDefault: NumberHours returns InputType", () => {
+  const result = getSmartDefault("作業時間", CLUSTER_TYPES_FULL["NumberHours"]);
+  assert.ok(result);
+  assert.ok(result.includes("InputType=0"));
+});
+
+test("getSmartDefault: Registration returns DisplayUserName", () => {
+  const result = getSmartDefault("登録者", CLUSTER_TYPES_FULL["Registration"]);
+  assert.ok(result);
+  assert.ok(result.includes("DisplayUserName=1"));
+});
+
+test("getSmartDefault: RegistrationDate returns DateFormat", () => {
+  const result = getSmartDefault("登録日", CLUSTER_TYPES_FULL["RegistrationDate"]);
+  assert.ok(result);
+  assert.ok(result.includes("DateFormat=yyyy/MM/dd"));
+});
+
+test("getSmartDefault: QRCode returns IsNumeric", () => {
+  const result = getSmartDefault("バーコード", CLUSTER_TYPES_FULL["QRCode"]);
+  assert.ok(result);
+  assert.ok(result.includes("IsNumeric=0"));
+});
+
+test("getSmartDefault: LoginUser returns AutoInput", () => {
+  const result = getSmartDefault("記入者", CLUSTER_TYPES_FULL["LoginUser"]);
+  assert.ok(result);
+  assert.ok(result.includes("AutoInput=0"));
 });

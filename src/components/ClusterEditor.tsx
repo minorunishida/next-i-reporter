@@ -9,7 +9,15 @@ import type {
   SheetStructure,
   CellInfo,
 } from "@/lib/form-structure";
-import { CLUSTER_TYPES } from "@/lib/form-structure";
+import { CLUSTER_TYPES, CLUSTER_TYPES_FULL } from "@/lib/form-structure";
+import {
+  TYPE_LABELS_JA,
+  MVP_TYPE_NAMES,
+  CLUSTER_TYPE_REGISTRY,
+  CATEGORY_LABELS_JA,
+  type ClusterCategory,
+  type ClusterTypeEntry,
+} from "@/lib/cluster-type-registry";
 import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
 import ClusterToolbar from "./ClusterToolbar";
 import CreateClusterPopover from "./CreateClusterPopover";
@@ -23,31 +31,10 @@ type Props = {
   onClustersChange: (clusters: ClusterDefinition[]) => void;
 };
 
-// ─── Type labels (Japanese) ──────────────────────────────────────────────────
+// ─── Type labels (レジストリから導出) ────────────────────────────────────────
 
-const TYPE_LABELS: Record<ClusterTypeName, string> = {
-  KeyboardText: "テキスト入力",
-  Date: "日付",
-  Time: "時刻",
-  InputNumeric: "数値入力",
-  Calculate: "計算式",
-  Select: "選択",
-  Check: "チェック",
-  Image: "画像",
-  Handwriting: "手書き",
-};
-
-const ALL_TYPE_NAMES: ClusterTypeName[] = [
-  "KeyboardText",
-  "Date",
-  "Time",
-  "InputNumeric",
-  "Calculate",
-  "Select",
-  "Check",
-  "Image",
-  "Handwriting",
-];
+const TYPE_LABELS = TYPE_LABELS_JA;
+const ALL_TYPE_NAMES = [...MVP_TYPE_NAMES] as ClusterTypeName[];
 
 // ─── Confidence helpers ──────────────────────────────────────────────────────
 
@@ -1542,15 +1529,24 @@ function PropertyPanel({
           value={cluster.typeName}
           onChange={(e) => {
             const typeName = e.target.value as ClusterTypeName;
-            onUpdate({ typeName, type: CLUSTER_TYPES[typeName] });
+            onUpdate({ typeName, type: CLUSTER_TYPES_FULL[typeName] });
           }}
           className="w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-800 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all"
         >
-          {ALL_TYPE_NAMES.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABELS[t]}
-            </option>
-          ))}
+          {(() => {
+            const grouped = new Map<ClusterCategory, ClusterTypeEntry[]>();
+            for (const entry of CLUSTER_TYPE_REGISTRY) {
+              if (!grouped.has(entry.category)) grouped.set(entry.category, []);
+              grouped.get(entry.category)!.push(entry);
+            }
+            return Array.from(grouped.entries()).map(([cat, entries]) => (
+              <optgroup key={cat} label={CATEGORY_LABELS_JA[cat]}>
+                {entries.map((e) => (
+                  <option key={e.name} value={e.name}>{e.displayNameJa}</option>
+                ))}
+              </optgroup>
+            ));
+          })()}
         </select>
       </div>
 

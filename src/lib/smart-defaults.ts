@@ -6,7 +6,7 @@
  */
 
 import type { ClusterDefinition } from "./form-structure";
-import { CLUSTER_TYPES } from "./form-structure";
+import { CLUSTER_TYPES, CLUSTER_TYPES_FULL } from "./form-structure";
 
 // --- パラメータ定義テーブル ---
 
@@ -130,6 +130,133 @@ const TYPE_DEFAULTS: TypeDefaults[] = [
     typeCode: CLUSTER_TYPES.Handwriting,
     rules: [],
     fallback: "Required=0",
+  },
+
+  // ─── Tier 1 ───────────────────────────────────────────────────────────────
+
+  // FixedText (20)
+  {
+    typeCode: CLUSTER_TYPES_FULL["FixedText"],
+    rules: [],
+    fallback: "Required=0;Lines=1;Width=3;Color=0,0,0",
+  },
+  // MultiSelect (80)
+  {
+    typeCode: CLUSTER_TYPES_FULL["MultiSelect"],
+    rules: [],
+    fallback:
+      "Display=Dropdown;Punctuation=,;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0;Align=Left",
+  },
+  // CalendarDate (111)
+  {
+    typeCode: CLUSTER_TYPES_FULL["CalendarDate"],
+    rules: [
+      {
+        keywords: ["生年月日", "誕生"],
+        params:
+          "Required=0;DateFormat=yyyy/MM/dd;AutoInput=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0;Align=Left",
+      },
+    ],
+    fallback:
+      "Required=0;DateFormat=yyyy/MM/dd;AutoInput=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0;Align=Left",
+  },
+  // Create (116)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Create"],
+    rules: [],
+    fallback: "Required=1;SignType=0;SignShortcut=0",
+  },
+  // Inspect (117)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Inspect"],
+    rules: [],
+    fallback: "Required=0;SignType=0;SignShortcut=0",
+  },
+  // Approve (118)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Approve"],
+    rules: [],
+    fallback: "Required=0;SignType=0;QuickSave=0;RequiredCheck=0",
+  },
+
+  // ─── Tier 2 ───────────────────────────────────────────────────────────────
+
+  // Numeric (60)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Numeric"],
+    rules: [
+      {
+        keywords: ["温度"],
+        params:
+          "Required=0;Minimum=0;Maximum=200;Decimal=1;Suffix=℃;Stepping=1;Comma=0;Align=Right;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+      },
+      {
+        keywords: ["金額", "価格", "単価", "合計"],
+        params:
+          "Required=0;Decimal=0;Comma=1;Stepping=1;Align=Right;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+      },
+    ],
+    fallback:
+      "Required=0;Decimal=0;Stepping=1;Comma=0;Align=Right;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // NumberHours (110)
+  {
+    typeCode: CLUSTER_TYPES_FULL["NumberHours"],
+    rules: [],
+    fallback:
+      "Required=0;InputType=0;Decimal=0;TimeFormat=HH:mm;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // TimeCalculate (55)
+  {
+    typeCode: CLUSTER_TYPES_FULL["TimeCalculate"],
+    rules: [],
+    fallback:
+      "TimeFormat=HH:mm;TimeCalculateType=0;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // Registration (112)
+  {
+    typeCode: CLUSTER_TYPES_FULL["Registration"],
+    rules: [],
+    fallback: "DisplayUserName=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // RegistrationDate (113)
+  {
+    typeCode: CLUSTER_TYPES_FULL["RegistrationDate"],
+    rules: [],
+    fallback: "DateFormat=yyyy/MM/dd;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // LatestUpdate (114)
+  {
+    typeCode: CLUSTER_TYPES_FULL["LatestUpdate"],
+    rules: [],
+    fallback: "DisplayUserName=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // LatestUpdateDate (115)
+  {
+    typeCode: CLUSTER_TYPES_FULL["LatestUpdateDate"],
+    rules: [],
+    fallback: "DateFormat=yyyy/MM/dd;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // QRCode (121)
+  {
+    typeCode: CLUSTER_TYPES_FULL["QRCode"],
+    rules: [],
+    fallback:
+      "Required=0;IsNumeric=0;UseExternalDevice=0;Lines=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // CodeReader (122)
+  {
+    typeCode: CLUSTER_TYPES_FULL["CodeReader"],
+    rules: [],
+    fallback:
+      "Required=0;Lines=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
+  },
+  // LoginUser (127)
+  {
+    typeCode: CLUSTER_TYPES_FULL["LoginUser"],
+    rules: [],
+    fallback:
+      "Required=0;AutoInput=0;FirstOnly=0;DisplayUserName=1;Font=MS Gothic;FontSize=11;Weight=Normal;Color=0,0,0",
   },
 ];
 

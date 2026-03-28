@@ -148,9 +148,9 @@ export function generateConmasXml(result: AnalysisResult): string {
   p("    <editStatus>0</editStatus>");
   p("    <publicStatus>0</publicStatus>");
   p("    <picOriginalResolution>0</picOriginalResolution>");
-  p("    <imageSize></imageSize>");
+  p("    <imageSize>0</imageSize>");
   p("    <isOriginalWhole>1</isOriginalWhole>");
-  p("    <wholeImageSize></wholeImageSize>");
+  p("    <wholeImageSize>0</wholeImageSize>");
   p("    <saveIndividuallyImage>0</saveIndividuallyImage>");
   p("    <definitionFile>");
   p("      <type></type>");

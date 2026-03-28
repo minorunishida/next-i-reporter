@@ -1,29 +1,12 @@
-export const TYPE_NUM_TO_STRING: Record<number, string> = {
-  5: "FixedText",
-  10: "FreeText",
-  15: "FreeDraw",
-  30: "KeyboardText",
-  40: "Date",
-  50: "Time",
-  55: "TimeCalculate",
-  60: "Numeric",
-  65: "InputNumeric",
-  67: "Calculate",
-  70: "Select",
-  80: "MultiSelect",
-  90: "Check",
-  100: "Image",
-  110: "NumberHours",
-  111: "CalendarDate",
-  119: "Handwriting",
-  120: "Gps",
-  121: "QRCode",
-  122: "CodeReader",
-  125: "SelectMaster",
-  126: "Action",
-  131: "AudioRecording",
-  132: "Scandit",
-  133: "EdgeOCR",
-};
+/**
+ * ConMas クラスタ型の数値↔文字列変換
+ * cluster-type-registry.ts から導出
+ */
 
-export const VALID_CLUSTER_TYPE_NAMES = new Set(Object.values(TYPE_NUM_TO_STRING));
+import { TYPE_NUM_TO_STRING_MAP, CLUSTER_TYPE_REGISTRY } from "./cluster-type-registry";
+
+export const TYPE_NUM_TO_STRING: Record<number, string> = TYPE_NUM_TO_STRING_MAP;
+
+export const VALID_CLUSTER_TYPE_NAMES: Set<string> = new Set(
+  CLUSTER_TYPE_REGISTRY.map((e) => e.name),
+);
