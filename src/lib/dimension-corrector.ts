@@ -9,7 +9,7 @@ import type { SheetStructure, PrintMeta } from "./form-structure";
  * これにより補間マッパーの px 側と pt 側が同じ比率になり、補間が恒等変換に近づく。
  */
 export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: PrintMeta) {
-  // 行高さの補正
+  // 可視行のみで補正（hidden 行は高さ 0 として扱う）
   if (meta.rows.length > 0) {
     const maxRow = meta.rows[meta.rows.length - 1].row; // 1-based
     const newRowHeights: number[] = new Array(maxRow).fill(15); // default pt
@@ -19,14 +19,14 @@ export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: Prin
     for (const r of meta.rows) {
       const idx = r.row - 1;
       if (idx >= 0 && idx < maxRow) {
-        newRowHeights[idx] = r.height;
+        newRowHeights[idx] = r.hidden ? 0 : r.height;
       }
     }
     sheet.rowHeights = newRowHeights;
     sheet.rowCount = Math.max(sheet.rowCount, maxRow);
   }
 
-  // 列幅の補正
+  // 可視列のみで補正（hidden 列は幅 0 として扱う）
   if (meta.columns.length > 0) {
     const maxCol = meta.columns[meta.columns.length - 1].col; // 1-based
     const newColWidths: number[] = new Array(maxCol).fill(12); // default pt
@@ -36,7 +36,7 @@ export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: Prin
     for (const c of meta.columns) {
       const idx = c.col - 1;
       if (idx >= 0 && idx < maxCol) {
-        newColWidths[idx] = c.width;
+        newColWidths[idx] = c.hidden ? 0 : c.width;
       }
     }
     sheet.colWidths = newColWidths;

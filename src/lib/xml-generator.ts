@@ -431,9 +431,10 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
   for (let i = 1; i <= 10; i++) {
     p(`          <remarksValue${i}></remarksValue${i}>`);
   }
-  // cellAddress は空にする: Designer の定義出力時に COM Range アクセスで
-  // 0x800A03EC エラーを起こすため。空なら §3.4 でスキップされる。
-  // 将来的に Excel セル構造と完全一致する cellAddress 生成ができれば復活する。
+  // cellAddress: Designer COM Range[addr] で 0x800A03EC エラーが発生するため空を維持。
+  // toAbsoluteCellAddress() でフォーマットは正しく $B$4 に変換できているが、
+  // AI が返すアドレスと Excel 実セル構造の不一致が原因の可能性あり。
+  // Designer 出力 XML との比較で正しいアドレス条件を特定する必要がある。
   p("          <cellAddress></cellAddress>");
   p("          <management>");
   p("            <valueToRemarks></valueToRemarks>");
@@ -446,10 +447,11 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
 
 /**
  * セルアドレスを Designer 準拠の絶対参照形式に変換
- * "B4" → "$B$4", 結合セルなら "$B$4:$C$5"
+ * "B4" → "$B$4"
  *
  * sheet.cells に該当セルが存在し、かつ値・数式・結合・罫線のいずれかを持つ場合のみ
  * アドレスを返す。空セル（装飾のみ）は空を返す (仕様 §3.4: 空ならスキップ → COM エラー回避)
+ * 結合セルの場合は origin セルのアドレスのみ返す（範囲形式だと Designer COM エラー）
  */
 function toAbsoluteCellAddress(addr: string, sheet: SheetStructure): string {
   if (!addr) return "";
@@ -465,11 +467,10 @@ function toAbsoluteCellAddress(addr: string, sheet: SheetStructure): string {
   const hasContent = !!(cell.value || cell.formula || cell.isMerged || cell.dataValidation);
   if (!hasContent) return "";
 
+  // 結合セルの場合は origin のアドレスのみ返す
   if (cell.isMerged && cell.mergeRange) {
-    const { startRow, startCol, endRow, endCol } = cell.mergeRange;
-    const startAddr = toAbsoluteRef(startCol, startRow);
-    const endAddr = toAbsoluteRef(endCol, endRow);
-    return startAddr === endAddr ? startAddr : `${startAddr}:${endAddr}`;
+    const { startRow, startCol } = cell.mergeRange;
+    return toAbsoluteRef(startCol, startRow);
   }
 
   // 単一セル: "B4" → "$B$4"

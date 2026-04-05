@@ -11,6 +11,7 @@ export default defineConfig({
     nav: [
       { text: "ガイド", link: "/guide/getting-started" },
       { text: "リファレンス", link: "/reference/cluster-types" },
+      { text: "開発", link: "/development/how-it-works" },
     ],
 
     sidebar: [
@@ -30,6 +31,14 @@ export default defineConfig({
         items: [
           { text: "クラスタータイプ一覧", link: "/reference/cluster-types" },
           { text: "パラメータリファレンス", link: "/reference/parameters" },
+        ],
+      },
+      {
+        text: "開発",
+        items: [
+          { text: "仕組み解説", link: "/development/how-it-works" },
+          { text: "AI プロンプト詳解", link: "/development/ai-prompt-analysis" },
+          { text: "API リファレンス", link: "/development/api-reference" },
         ],
       },
     ],

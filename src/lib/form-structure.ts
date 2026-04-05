@@ -93,8 +93,9 @@ export type PrintMeta = {
   orientation: number;       // 1=Portrait, 2=Landscape
   pdfPageWidthPt: number;
   pdfPageHeightPt: number;
-  rows: Array<{ row: number; height: number; top: number }>; // pt
-  columns: Array<{ col: number; width: number; left: number }>; // pt
+  rows: Array<{ row: number; height: number; top: number; hidden?: boolean }>; // pt
+  columns: Array<{ col: number; width: number; left: number; hidden?: boolean }>; // pt
+  merges?: Array<{ originRow: number; originCol: number; originAddress: string }>;
 };
 
 export type SheetStructure = {
