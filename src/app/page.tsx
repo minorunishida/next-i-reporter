@@ -20,8 +20,7 @@ const ANALYZING_MESSAGES = [
 import ExcelUploader from "@/components/ExcelUploader";
 import FormPreview from "@/components/FormPreview";
 import ClusterEditor from "@/components/ClusterEditor";
-import { NetworkEditor } from "@/components/NetworkEditor";
-import { CarbonCopyEditor } from "@/components/CarbonCopyEditor";
+import EditorShell from "@/components/layout/EditorShell";
 import type { FormStructure, AnalysisResult, ClusterDefinition, NetworkDefinition } from "@/lib/form-structure";
 import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 
@@ -32,8 +31,7 @@ export default function Home() {
   const [formStructure, setFormStructure] = useState<FormStructure | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"clusters" | "networks" | "carbonCopy">("clusters");
-  const [selectedNetworkId, setSelectedNetworkId] = useState<string | null>(null);
+  // activeTab and selectedNetworkId are now managed inside EditorShell's EditorContext
 
   const handleParsed = useCallback((data: FormStructure) => {
     setFormStructure(data);
@@ -177,8 +175,8 @@ export default function Home() {
   ] as const;
 
   return (
-    <main className="flex min-h-[calc(100vh-2.5rem)] flex-col items-center px-4 py-4 sm:py-6">
-      <div className="w-full max-w-7xl animate-fade-in-up">
+    <main className={`flex min-h-[calc(100vh-2.5rem)] flex-col ${step === "result" ? "" : "items-center px-4 py-4 sm:py-6"}`}>
+      <div className={`w-full animate-fade-in-up ${step === "result" ? "" : "max-w-7xl mx-auto px-4"}`}>
         {/* Step indicator */}
         <div className="mb-4 flex justify-center">
           <div className="flex items-center gap-0">
@@ -306,212 +304,145 @@ export default function Home() {
           </section>
         )}
 
-        {/* STEP 3: Results */}
+        {/* STEP 3: Results — Acrobat-style 3-column layout */}
         {step === "result" && analysisResult && formStructure && (
-          <section className="flex flex-col gap-3 animate-fade-in-up">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h2 className="text-sm font-semibold text-slate-900">
-                  AI 解析結果
-                </h2>
-                <span className="text-xs text-slate-400">
-                  {analysisResult.summary.totalClusters} クラスター検出
-                </span>
+          <EditorShell
+            analysisResult={analysisResult}
+            formStructure={analysisResult.formStructure}
+            onClustersChange={handleClustersChange}
+            onNetworksChange={handleNetworksChange}
+            onCarbonCopyChange={handleCarbonCopyChange}
+            headerSlot={
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h2 className="text-sm font-semibold text-slate-900">AI 解析結果</h2>
+                  <span className="text-xs text-slate-400">
+                    {analysisResult.summary.totalClusters} クラスター検出
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setStep("preview")}
+                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  >
+                    プレビューに戻る
+                  </button>
+                  <button
+                    onClick={handleReset}
+                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  >
+                    最初から
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-2">
+            }
+            actionBarSlot={
+              <>
                 <button
-                  onClick={() => setStep("preview")}
-                  className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  onClick={handleReanalyze}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors duration-150"
                 >
-                  プレビューに戻る
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    AI で再解析
+                  </span>
                 </button>
                 <button
-                  onClick={handleReset}
-                  className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  type="button"
+                  disabled={!analysisResult.formStructure.excelBase64?.trim()}
+                  title={
+                    analysisResult.formStructure.excelBase64?.trim()
+                      ? undefined
+                      : "Excel から取り込んだ帳票、または定義ファイル付き XML のみダウンロードできます"
+                  }
+                  onClick={async () => {
+                    if (!analysisResult) return;
+                    try {
+                      const res = await fetch("/api/generate-excel-definition", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(analysisResult),
+                      });
+                      if (!res.ok) {
+                        throw new Error(messageFromFailedResponse(await res.text(), res.status));
+                      }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      const baseDl =
+                        analysisResult.formStructure.embeddedExcelFileName?.trim() ||
+                        analysisResult.formStructure.fileName ||
+                        "definition.xlsx";
+                      a.download = /\.xml$/i.test(baseDl)
+                        ? baseDl.replace(/\.xml$/i, ".xlsx")
+                        : baseDl;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Excel 定義の生成に失敗しました");
+                    }
+                  }}
+                  className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-[#217346] hover:bg-[#1a5c38] shadow-sm transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#217346]"
                 >
-                  最初から
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Excel 定義をダウンロード
+                  </span>
                 </button>
-              </div>
-            </div>
-
-            {/* タブ切り替え */}
-            <div className="flex gap-0 border-b border-slate-200">
-              <button
-                onClick={() => setActiveTab("clusters")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === "clusters"
-                    ? "border-indigo-500 text-indigo-700"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                クラスター
-              </button>
-              <button
-                onClick={() => setActiveTab("networks")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-                  activeTab === "networks"
-                    ? "border-indigo-500 text-indigo-700"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                ネットワーク
-                {(analysisResult.formStructure.networks?.length ?? 0) > 0 && (
-                  <span className="inline-flex items-center justify-center text-xs bg-indigo-100 text-indigo-700 rounded-full px-1.5 min-w-[1.25rem] h-5">
-                    {analysisResult.formStructure.networks!.length}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setActiveTab("carbonCopy")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
-                  activeTab === "carbonCopy"
-                    ? "border-emerald-500 text-emerald-700"
-                    : "border-transparent text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                カーボンコピー
-                {analysisResult.clusters.some((c) => c.carbonCopy?.length) && (
-                  <span className="inline-flex items-center justify-center text-xs bg-emerald-100 text-emerald-700 rounded-full px-1.5 min-w-[1.25rem] h-5">
-                    {analysisResult.clusters.reduce((n, c) => n + (c.carbonCopy?.length ?? 0), 0)}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {activeTab === "clusters" && (
-              <ClusterEditor
-                analysisResult={analysisResult}
-                formStructure={analysisResult.formStructure}
-                onClustersChange={handleClustersChange}
-                networks={analysisResult.formStructure.networks}
-                selectedNetworkId={selectedNetworkId}
-                onNetworksChange={handleNetworksChange}
-                onCarbonCopyChange={handleCarbonCopyChange}
-              />
-            )}
-
-            {activeTab === "networks" && (
-              <div className="h-[600px]">
-                <NetworkEditor
-                  networks={analysisResult.formStructure.networks ?? []}
-                  clusters={analysisResult.clusters}
-                  sheets={analysisResult.formStructure.sheets}
-                  onChange={handleNetworksChange}
-                  onSelectNetwork={setSelectedNetworkId}
-                />
-              </div>
-            )}
-
-            {activeTab === "carbonCopy" && (
-              <div className="h-[600px]">
-                <CarbonCopyEditor
-                  clusters={analysisResult.clusters}
-                  sheets={analysisResult.formStructure.sheets}
-                  onChange={handleCarbonCopyChange}
-                />
-              </div>
-            )}
-
-            <div className="sticky bottom-0 z-40 -mx-4 mt-1 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200/80 bg-white/80 px-4 py-2.5 backdrop-blur-sm">
-              <button
-                onClick={handleReanalyze}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors duration-150"
-              >
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  AI で再解析
-                </span>
-              </button>
-              <button
-                type="button"
-                disabled={!analysisResult.formStructure.excelBase64?.trim()}
-                title={
-                  analysisResult.formStructure.excelBase64?.trim()
-                    ? undefined
-                    : "Excel から取り込んだ帳票、または定義ファイル付き XML のみダウンロードできます"
-                }
-                onClick={async () => {
-                  if (!analysisResult) return;
-                  try {
-                    const res = await fetch("/api/generate-excel-definition", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(analysisResult),
-                    });
-                    if (!res.ok) {
-                      throw new Error(
-                        messageFromFailedResponse(await res.text(), res.status),
-                      );
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!analysisResult) return;
+                    try {
+                      const res = await fetch("/api/generate-xml", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(analysisResult),
+                      });
+                      if (!res.ok) {
+                        throw new Error(messageFromFailedResponse(await res.text(), res.status));
+                      }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      const name = analysisResult.formStructure.fileName.replace(/\.[^.]+$/, "") + "_conmas.xml";
+                      a.download = name;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "XML 生成に失敗しました");
                     }
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    const baseDl =
-                      analysisResult.formStructure.embeddedExcelFileName?.trim() ||
-                      analysisResult.formStructure.fileName ||
-                      "definition.xlsx";
-                    a.download = /\.xml$/i.test(baseDl)
-                      ? baseDl.replace(/\.xml$/i, ".xlsx")
-                      : baseDl;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "Excel 定義の生成に失敗しました");
-                  }
-                }}
-                className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-[#217346] hover:bg-[#1a5c38] shadow-sm transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#217346]"
-              >
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  Excel 定義をダウンロード
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!analysisResult) return;
-                  try {
-                    const res = await fetch("/api/generate-xml", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(analysisResult),
-                    });
-                    if (!res.ok) {
-                      throw new Error(
-                        messageFromFailedResponse(await res.text(), res.status),
-                      );
-                    }
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    const name = analysisResult.formStructure.fileName.replace(/\.[^.]+$/, "") + "_conmas.xml";
-                    a.download = name;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "XML 生成に失敗しました");
-                  }
-                }}
-                className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 transition-colors duration-150"
-              >
-                <span className="flex items-center gap-2">
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                  ConMas XML をダウンロード
-                </span>
-              </button>
-            </div>
-          </section>
+                  }}
+                  className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 transition-colors duration-150"
+                >
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ConMas XML をダウンロード
+                  </span>
+                </button>
+              </>
+            }
+          >
+            <ClusterEditor
+              analysisResult={analysisResult}
+              formStructure={analysisResult.formStructure}
+              onClustersChange={handleClustersChange}
+              networks={analysisResult.formStructure.networks}
+              onNetworksChange={handleNetworksChange}
+              onCarbonCopyChange={handleCarbonCopyChange}
+            />
+          </EditorShell>
         )}
       </div>
 
