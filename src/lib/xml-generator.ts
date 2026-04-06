@@ -1,8 +1,9 @@
-import type { AnalysisResult, ClusterDefinition, SheetStructure } from "./form-structure";
+import type { AnalysisResult, ClusterDefinition, NetworkDefinition, SheetStructure } from "./form-structure";
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
 import { buildMergedDefinitionExcelBase64 } from "./excel-definition-export";
 import { isXlsxZipBuffer } from "./excel-comment-writer";
 import { mapClusterRegionToPdf } from "./print-coord-mapper";
+import { resolveClusterXmlIds } from "./network-utils";
 
 /**
  * シート数に応じた白いPDFを動的生成 (Base64)。
@@ -170,7 +171,7 @@ function appendConmasTopInnerAfterEmbeds(
   p("    <isReportCopy>1</isReportCopy>");
   p("    <reportCopyType>0</reportCopyType>");
   p("    <mobileEditType>0</mobileEditType>");
-  p("    <useNetworkAutoInputStart>0</useNetworkAutoInputStart>");
+  p(`    <useNetworkAutoInputStart>${formStructure.useNetworkAutoInputStart ?? 0}</useNetworkAutoInputStart>`);
   p("    <existReportMaster></existReportMaster>");
   p("    <useApplicantLock>0</useApplicantLock>");
   p("    <useInputHistory>0</useInputHistory>");
@@ -200,7 +201,7 @@ function appendConmasTopInnerAfterEmbeds(
   p("    <trailOutput>0</trailOutput>");
   p("    <indexType>0</indexType>");
   p("    <voiceInputEndTime></voiceInputEndTime>");
-  p("    <networkAnswerbackMode>0</networkAnswerbackMode>");
+  p(`    <networkAnswerbackMode>${formStructure.networkAnswerbackMode ?? 0}</networkAnswerbackMode>`);
   p("    <audioRecordingFileFormat>0</audioRecordingFileFormat>");
   p("    <fontAutoResizingMode>0</fontAutoResizingMode>");
   p("    <useReferencedCluster>0</useReferencedCluster>");
@@ -269,7 +270,7 @@ function appendConmasTopInnerAfterEmbeds(
   p("    <dailyReportCluster></dailyReportCluster>");
   p("    <workReportTableNo></workReportTableNo>");
   p("    <labels></labels>");
-  p("    <networks></networks>");
+  L.push(...genNetworks(formStructure.networks ?? [], clusters));
   p("    <matrixScanSetting>");
   p("      <useScanditCluster></useScanditCluster>");
   p("      <scanditClusters></scanditClusters>");
@@ -284,6 +285,51 @@ function appendConmasTopInnerAfterEmbeds(
     L.push(...genSheet(sheet, sc));
   }
   p("    </sheets>");
+}
+
+/** ネットワーク一覧を XML 行配列に変換する */
+function genNetworks(networks: NetworkDefinition[], allClusters: ClusterDefinition[]): string[] {
+  const L: string[] = [];
+  const p = (line: string) => L.push(line);
+
+  p("    <networks>");
+  for (const net of networks) {
+    const prev = resolveClusterXmlIds(net.prevClusterId, allClusters);
+    const next = resolveClusterXmlIds(net.nextClusterId, allClusters);
+    if (!prev || !next) continue; // 解決できないクラスター参照はスキップ
+
+    p("      <network>");
+    p(`        <prevSheetNo>${prev.sheetNo}</prevSheetNo>`);
+    p(`        <prevClusterId>${prev.clusterId}</prevClusterId>`);
+    p(`        <nextSheetNo>${next.sheetNo}</nextSheetNo>`);
+    p(`        <nextClusterId>${next.clusterId}</nextClusterId>`);
+    p(`        <nextAutoInputStart>${net.nextAutoInputStart}</nextAutoInputStart>`);
+    p(`        <relation>${net.relation}</relation>`);
+    p(`        <skip>${net.skip}</skip>`);
+    p(`        <requiredValue>${esc(net.requiredValue)}</requiredValue>`);
+    p(`        <customMasterSearchField>${esc(net.customMasterSearchField)}</customMasterSearchField>`);
+    p(`        <checkGroupIdMode>${esc(net.checkGroupIdMode)}</checkGroupIdMode>`);
+    p(`        <noNeedToFillOut>${net.noNeedToFillOut}</noNeedToFillOut>`);
+    p(`        <terminalType>${net.terminalType}</terminalType>`);
+    p(`        <nextAutoInput>${net.nextAutoInput}</nextAutoInput>`);
+    p(`        <nextAutoInputEdit>${net.nextAutoInputEdit}</nextAutoInputEdit>`);
+    if (net.valueLinks.length === 0) {
+      p("        <valueLinks></valueLinks>");
+    } else {
+      p("        <valueLinks>");
+      for (const vl of net.valueLinks) {
+        p("          <valueLink>");
+        p(`            <parentValue>${esc(vl.parentValue)}</parentValue>`);
+        p(`            <selectValues>${esc(vl.selectValues)}</selectValues>`);
+        p("          </valueLink>");
+      }
+      p("        </valueLinks>");
+    }
+    p("      </network>");
+  }
+  p("    </networks>");
+
+  return L;
 }
 
 function definitionFileMetaForTop(formStructure: AnalysisResult["formStructure"]): {

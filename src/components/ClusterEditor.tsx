@@ -6,6 +6,7 @@ import type {
   ClusterDefinition,
   ClusterTypeName,
   FormStructure,
+  NetworkDefinition,
   SheetStructure,
   CellInfo,
 } from "@/lib/form-structure";
@@ -19,6 +20,7 @@ import {
   type ClusterTypeEntry,
 } from "@/lib/cluster-type-registry";
 import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
+import { createNetwork } from "@/lib/network-utils";
 import { loadPdfJs } from "@/lib/load-pdfjs";
 import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 import ClusterToolbar from "./ClusterToolbar";
@@ -32,6 +34,9 @@ type Props = {
   analysisResult: AnalysisResult;
   formStructure: FormStructure;
   onClustersChange: (clusters: ClusterDefinition[]) => void;
+  networks?: NetworkDefinition[];
+  selectedNetworkId?: string | null;
+  onNetworksChange?: (networks: NetworkDefinition[]) => void;
 };
 
 // ─── Type labels (レジストリから導出) ────────────────────────────────────────
@@ -66,7 +71,7 @@ const BASE_PAPER_WIDTH_PX = 600;
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export default function ClusterEditor({ analysisResult, formStructure, onClustersChange }: Props) {
+export default function ClusterEditor({ analysisResult, formStructure, onClustersChange, networks, selectedNetworkId, onNetworksChange }: Props) {
   const clusters = analysisResult.clusters;
 
   // --- Local state ---
@@ -78,7 +83,10 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; clusterId: string } | null>(null);
   const [zoom, setZoom] = useState(1.0);
-  const [editorMode, setEditorMode] = useState<"select" | "create">("select");
+  const [editorMode, setEditorMode] = useState<"select" | "create" | "network">("select");
+  const [showNetworkLines, setShowNetworkLines] = useState(true);
+  // ネットワーク接続モード: 最初にクリックした（親）クラスターID
+  const [networkFromId, setNetworkFromId] = useState<string | null>(null);
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(3.0, Math.round((z + 0.1) * 10) / 10)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10)), []);
@@ -156,6 +164,17 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   const handleClusterClick = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
+
+      if (editorMode === "network" && onNetworksChange) {
+        if (!networkFromId) {
+          setNetworkFromId(id);
+        } else if (networkFromId !== id) {
+          onNetworksChange([...(networks ?? []), createNetwork(networkFromId, id)]);
+          setNetworkFromId(null);
+        }
+        return;
+      }
+
       setSelectedId(id);
       // Shift or Ctrl/Cmd for multi-select
       if (e.shiftKey || e.metaKey || e.ctrlKey) {
@@ -169,7 +188,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         setSelectedIds(new Set([id]));
       }
     },
-    []
+    [editorMode, networkFromId, networks, onNetworksChange]
   );
 
   const handleContextMenu = useCallback(
@@ -235,9 +254,10 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
 
       // Mode switching
       switch (e.key) {
-        case "n": case "N": setEditorMode("create"); return;
-        case "v": case "V": setEditorMode("select"); return;
-        case "Escape": setEditorMode("select"); return;
+        case "n": case "N": setEditorMode("create"); setNetworkFromId(null); return;
+        case "v": case "V": setEditorMode("select"); setNetworkFromId(null); return;
+        case "l": case "L": setEditorMode("network"); return;
+        case "Escape": setEditorMode("select"); setNetworkFromId(null); return;
       }
 
       // Nudge (only when clusters are selected)
@@ -365,6 +385,28 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         onBulkDelete={handleBulkDelete}
         onNudge={handleNudge}
       />
+
+      {/* ネットワーク接続線トグル */}
+      {networks && networks.length > 0 && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowNetworkLines((v) => !v)}
+            className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border transition-colors ${
+              showNetworkLines
+                ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+            }`}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
+              <circle cx="3" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
+              <circle cx="11" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
+              <line x1="5" y1="7" x2="9" y2="7" stroke={showNetworkLines ? "#6366f1" : "#9ca3af"} strokeWidth="1.5" markerEnd="url(#a)" />
+            </svg>
+            接続線 {showNetworkLines ? "表示中" : "非表示"}
+          </button>
+          <span className="text-xs text-gray-400">{networks.length} 件の接続</span>
+        </div>
+      )}
 
       {/* Sheet tabs */}
       {formStructure.sheets.length > 1 && (
@@ -516,6 +558,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
             <VisualPreview
               sheet={sheet}
               clusters={filteredClusters}
+              allClusters={analysisResult.clusters}
               selectedId={selectedId}
               selectedIds={selectedIds}
               onClusterClick={handleClusterClick}
@@ -530,6 +573,10 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               zoom={zoom}
               editorMode={editorMode}
               onCreateDragEnd={handleCreateDragEnd}
+              networks={networks}
+              selectedNetworkId={selectedNetworkId}
+              showNetworkLines={showNetworkLines}
+              networkFromId={networkFromId}
             />
           </div>
         </div>
@@ -924,6 +971,7 @@ function GroupBoundingBox({
 function VisualPreview({
   sheet,
   clusters,
+  allClusters,
   selectedId,
   selectedIds,
   onClusterClick,
@@ -938,9 +986,14 @@ function VisualPreview({
   zoom = 1,
   editorMode = "select",
   onCreateDragEnd,
+  networks,
+  selectedNetworkId,
+  showNetworkLines = true,
+  networkFromId = null,
 }: {
   sheet: SheetStructure;
   clusters: ClusterDefinition[];
+  allClusters: ClusterDefinition[];
   selectedId: string | null;
   selectedIds: Set<string>;
   onClusterClick: (id: string, e: React.MouseEvent) => void;
@@ -953,11 +1006,35 @@ function VisualPreview({
   pdfBase64?: string;
   activeSheetIndex: number;
   zoom?: number;
-  editorMode?: "select" | "create";
+  editorMode?: "select" | "create" | "network";
   onCreateDragEnd?: (region: { top: number; bottom: number; left: number; right: number; screenX: number; screenY: number }) => void;
+  networks?: NetworkDefinition[];
+  selectedNetworkId?: string | null;
+  showNetworkLines?: boolean;
+  networkFromId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const editorModeIsNetwork = editorMode === "network";
+
+  const [networkMousePos, setNetworkMousePos] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!editorModeIsNetwork || !networkFromId || !containerRef.current) {
+      setNetworkMousePos(null);
+      return;
+    }
+    const el = containerRef.current;
+    let rafId = 0;
+    const handler = (e: MouseEvent) => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const rect = el.getBoundingClientRect();
+        setNetworkMousePos({ x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom });
+      });
+    };
+    el.addEventListener("mousemove", handler);
+    return () => { el.removeEventListener("mousemove", handler); cancelAnimationFrame(rafId); };
+  }, [editorModeIsNetwork, networkFromId, zoom]);
 
   const usePdfMode = !!pdfBase64 && !!sheet.printMeta;
 
@@ -1248,6 +1325,7 @@ function VisualPreview({
   const renderCluster = (cluster: ClusterDefinition) => {
     const isSelected = cluster.id === selectedId;
     const isInGroup = selectedIds.has(cluster.id);
+    const isNetworkFrom = editorModeIsNetwork && cluster.id === networkFromId;
     const cc = confidenceColor(cluster.confidence);
 
     let top: number, left: number, width: number, height: number;
@@ -1274,22 +1352,28 @@ function VisualPreview({
         data-cluster-id={cluster.id}
         onClick={(e) => onClusterClick(cluster.id, e)}
         onContextMenu={(e) => onContextMenu(cluster.id, e)}
-        className="absolute cursor-default transition-all duration-150"
+        className={`absolute transition-all duration-150 ${
+          editorModeIsNetwork ? "cursor-cell" : "cursor-default"
+        }`}
         style={{
           top,
           left,
           width,
           height,
-          backgroundColor: cc.bg,
-          border: isSelected
-            ? "2px solid rgb(59,130,246)"
-            : isInGroup
-              ? "2px solid rgb(147,197,253)"
+          backgroundColor: isNetworkFrom ? "rgba(99,102,241,0.25)" : cc.bg,
+          border: isNetworkFrom
+            ? "2px solid rgb(99,102,241)"
+            : isSelected
+              ? "2px solid rgb(59,130,246)"
+              : isInGroup
+                ? "2px solid rgb(147,197,253)"
               : `1.5px solid ${cc.border}`,
           borderRadius: 3,
-          zIndex: isSelected ? 30 : isInGroup ? 20 : 10,
-          boxShadow: isSelected
-            ? "0 0 0 3px rgba(59,130,246,0.2)"
+          zIndex: isNetworkFrom ? 40 : isSelected ? 30 : isInGroup ? 20 : 10,
+          boxShadow: isNetworkFrom
+            ? "0 0 0 4px rgba(99,102,241,0.3)"
+            : isSelected
+              ? "0 0 0 3px rgba(59,130,246,0.2)"
               : undefined,
         }}
         title={`${cluster.name} (${TYPE_LABELS[cluster.typeName]}) — ${Math.round(cluster.confidence * 100)}%`}
@@ -1341,7 +1425,7 @@ function VisualPreview({
       ref={containerRef}
       onMouseDown={(e) => { handleRubberBandStart(e); handleCreateDragStart(e); }}
       className={`bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out ${
-        editorMode === "create" ? "cursor-crosshair" : ""
+        editorMode === "create" ? "cursor-crosshair" : editorModeIsNetwork ? "cursor-cell" : ""
       }`}
       style={{
         width: paperDims.wPx,
@@ -1467,6 +1551,104 @@ function VisualPreview({
           </div>
         </>
       )}
+      {/* ネットワーク接続線オーバーレイ (最前面) */}
+      {/* ネットワーク接続線オーバーレイ + 仮線 */}
+      {(() => {
+        // 共通: クラスターの中心座標を paper div 内の px で返す
+        function clusterCenter(c: ClusterDefinition): { x: number; y: number } | null {
+          if (c.sheetNo !== activeSheetIndex) return null;
+          if (usePdfMode && sheet.printMeta) {
+            const mapped = mapClusterRegionToPdf(c.region, sheet, sheet.printMeta);
+            if (!mapped) return null;
+            return {
+              x: ((mapped.left + mapped.right) / 2) * paperDims.wPx,
+              y: ((mapped.top + mapped.bottom) / 2) * paperDims.hPx,
+            };
+          }
+          return {
+            x: marginPx.left + ((c.region.left + c.region.right) / 2) * tableScale,
+            y: marginPx.top + ((c.region.top + c.region.bottom) / 2) * tableScale,
+          };
+        }
+
+        const svgs: React.ReactNode[] = [];
+
+        // 確定済みネットワーク線
+        if (showNetworkLines && networks && networks.length > 0) {
+          const centerMap = new Map<string, { x: number; y: number }>();
+          for (const c of allClusters) {
+            const pt = clusterCenter(c);
+            if (pt) centerMap.set(c.id, pt);
+          }
+
+          const lines = networks.flatMap((net, i) => {
+            const from = centerMap.get(net.prevClusterId);
+            const to = centerMap.get(net.nextClusterId);
+            if (!from || !to) return [];
+            const dx = to.x - from.x, dy = to.y - from.y;
+            if (dx * dx + dy * dy < 1) return [];
+            const isHi = net.id === selectedNetworkId;
+            return [(
+              <g key={`net-${i}`} opacity={isHi ? 1 : 0.65}>
+                <line
+                  x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                  stroke={isHi ? "#818cf8" : "#6366f1"}
+                  strokeWidth={isHi ? 3 : 2}
+                  markerEnd={`url(#arrow-${isHi ? "hi" : "lo"})`}
+                />
+              </g>
+            )];
+          });
+
+          if (lines.length > 0) {
+            svgs.push(
+              <svg
+                key="net-lines"
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 55 }}
+                width={paperDims.wPx} height={paperDims.hPx}
+                viewBox={`0 0 ${paperDims.wPx} ${paperDims.hPx}`}
+              >
+                <defs>
+                  <marker id="arrow-lo" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
+                  </marker>
+                  <marker id="arrow-hi" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L8,3 z" fill="#818cf8" />
+                  </marker>
+                </defs>
+                {lines}
+              </svg>
+            );
+          }
+        }
+
+        // 接続中の仮線 (fromクラスター → マウス)
+        if (editorModeIsNetwork && networkFromId && networkMousePos) {
+          const fromCluster = allClusters.find((c) => c.id === networkFromId);
+          const fromPt = fromCluster ? clusterCenter(fromCluster) : null;
+          if (fromPt) {
+            svgs.push(
+              <svg
+                key="net-drag"
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 60 }}
+                width={paperDims.wPx} height={paperDims.hPx}
+                viewBox={`0 0 ${paperDims.wPx} ${paperDims.hPx}`}
+              >
+                <line
+                  x1={fromPt.x} y1={fromPt.y}
+                  x2={networkMousePos.x} y2={networkMousePos.y}
+                  stroke="#818cf8" strokeWidth={2} strokeDasharray="6 3" opacity={0.8}
+                />
+                <circle cx={fromPt.x} cy={fromPt.y} r={4} fill="#6366f1" />
+              </svg>
+            );
+          }
+        }
+
+        return svgs.length > 0 ? svgs : null;
+      })()}
     </div>
     </div>
   );

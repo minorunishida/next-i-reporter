@@ -9,9 +9,12 @@ import type {
   FormStructure,
   SheetStructure,
   ClusterDefinition,
+  NetworkDefinition,
+  ValueLink,
   AnalysisResult,
 } from "./form-structure";
 import { REGISTRY_BY_NAME } from "./cluster-type-registry";
+import { resolveInternalId } from "./network-utils";
 
 // ─── 簡易 XML パーサーヘルパー ──────────────────────────────────────────────
 
@@ -150,12 +153,62 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
     }
   }
 
+  // networks パース (クラスターを全部パースした後に実施)
+  const useNetworkAutoInputStart = (getTagNum(top, "useNetworkAutoInputStart", 0) as 0 | 1);
+  const networkAnswerbackMode = (getTagNum(top, "networkAnswerbackMode", 0) as 0 | 1);
+
+  const networksMatch = top.match(/<networks>([\s\S]*?)<\/networks>/);
+  const networksXml = networksMatch ? networksMatch[1] : "";
+  const networkXmls = getAllTags(networksXml, "network");
+
+  let netCounter = 0;
+  const networks: NetworkDefinition[] = networkXmls.flatMap((nx) => {
+    const prevSheetNo = getTagNum(nx, "prevSheetNo", 1);
+    const prevClusterIdNum = getTagNum(nx, "prevClusterId", 0);
+    const nextSheetNo = getTagNum(nx, "nextSheetNo", 1);
+    const nextClusterIdNum = getTagNum(nx, "nextClusterId", 0);
+
+    const prevInternalId = resolveInternalId(prevSheetNo, prevClusterIdNum, allClusters);
+    const nextInternalId = resolveInternalId(nextSheetNo, nextClusterIdNum, allClusters);
+    if (!prevInternalId || !nextInternalId) return [];
+
+    const valueLinksXml = getAllTags(nx, "valueLink");
+    const valueLinks: ValueLink[] = valueLinksXml.map((vl) => ({
+      parentValue: getTagText(vl, "parentValue"),
+      selectValues: getTagText(vl, "selectValues"),
+    }));
+
+    const terminalTypeStr = getTagText(nx, "terminalType");
+    const terminalType: 0 | 1 | "" =
+      terminalTypeStr === "0" ? 0 : terminalTypeStr === "1" ? 1 : "";
+
+    return [{
+      id: `net-${netCounter++}`,
+      prevClusterId: prevInternalId,
+      nextClusterId: nextInternalId,
+      nextAutoInputStart: (parseInt(getTagText(nx, "nextAutoInputStart") || "1", 10) || 0) as 0 | 1,
+      relation: getTagText(nx, "relation") as NetworkDefinition["relation"],
+      skip: (getTagNum(nx, "skip", 0)) as 0 | 1 | 2,
+      requiredValue: getTagText(nx, "requiredValue"),
+      customMasterSearchField: getTagText(nx, "customMasterSearchField"),
+      checkGroupIdMode: getTagText(nx, "checkGroupIdMode"),
+      noNeedToFillOut: (getTagNum(nx, "noNeedToFillOut", 0)) as 0 | 1 | 2,
+      terminalType,
+      nextAutoInput: (getTagNum(nx, "nextAutoInput", 0)) as 0 | 1,
+      nextAutoInputEdit: (getTagNum(nx, "nextAutoInputEdit", 0)) as 0 | 1,
+      valueLinks,
+    }];
+  });
+
   const formStructure: FormStructure = {
     fileName: fileName || excelFileName || `${defTopName}.xml`,
     sheets,
     pdfBase64,
     excelBase64,
     embeddedExcelFileName: excelFileName || undefined,
+    networks: networks.length > 0 ? networks : undefined,
+    useNetworkAutoInputStart,
+    networkAnswerbackMode,
   };
 
   const highConfidence = allClusters.filter((c) => c.confidence >= 0.9).length;

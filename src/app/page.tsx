@@ -20,7 +20,8 @@ const ANALYZING_MESSAGES = [
 import ExcelUploader from "@/components/ExcelUploader";
 import FormPreview from "@/components/FormPreview";
 import ClusterEditor from "@/components/ClusterEditor";
-import type { FormStructure, AnalysisResult, ClusterDefinition } from "@/lib/form-structure";
+import { NetworkEditor } from "@/components/NetworkEditor";
+import type { FormStructure, AnalysisResult, ClusterDefinition, NetworkDefinition } from "@/lib/form-structure";
 import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 
 type Step = "upload" | "preview" | "analyzing" | "result";
@@ -30,6 +31,8 @@ export default function Home() {
   const [formStructure, setFormStructure] = useState<FormStructure | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"clusters" | "networks">("clusters");
+  const [selectedNetworkId, setSelectedNetworkId] = useState<string | null>(null);
 
   const handleParsed = useCallback((data: FormStructure) => {
     setFormStructure(data);
@@ -98,6 +101,16 @@ export default function Home() {
           mediumConfidence,
           lowConfidence,
         },
+      };
+    });
+  }, []);
+
+  const handleNetworksChange = useCallback((networks: NetworkDefinition[]) => {
+    setAnalysisResult((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        formStructure: { ...prev.formStructure, networks },
       };
     });
   }, []);
@@ -304,11 +317,57 @@ export default function Home() {
               </div>
             </div>
 
-            <ClusterEditor
-              analysisResult={analysisResult}
-              formStructure={formStructure}
-              onClustersChange={handleClustersChange}
-            />
+            {/* タブ切り替え */}
+            <div className="flex gap-0 border-b border-slate-200">
+              <button
+                onClick={() => setActiveTab("clusters")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === "clusters"
+                    ? "border-indigo-500 text-indigo-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                クラスター
+              </button>
+              <button
+                onClick={() => setActiveTab("networks")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                  activeTab === "networks"
+                    ? "border-indigo-500 text-indigo-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                ネットワーク
+                {(analysisResult.formStructure.networks?.length ?? 0) > 0 && (
+                  <span className="inline-flex items-center justify-center text-xs bg-indigo-100 text-indigo-700 rounded-full px-1.5 min-w-[1.25rem] h-5">
+                    {analysisResult.formStructure.networks!.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {activeTab === "clusters" && (
+              <ClusterEditor
+                analysisResult={analysisResult}
+                formStructure={analysisResult.formStructure}
+                onClustersChange={handleClustersChange}
+                networks={analysisResult.formStructure.networks}
+                selectedNetworkId={selectedNetworkId}
+                onNetworksChange={handleNetworksChange}
+              />
+            )}
+
+            {activeTab === "networks" && (
+              <div className="h-[600px]">
+                <NetworkEditor
+                  networks={analysisResult.formStructure.networks ?? []}
+                  clusters={analysisResult.clusters}
+                  sheets={analysisResult.formStructure.sheets}
+                  onChange={handleNetworksChange}
+                  onSelectNetwork={setSelectedNetworkId}
+                />
+              </div>
+            )}
 
             <div className="sticky bottom-0 z-40 -mx-4 mt-1 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200/80 bg-white/80 px-4 py-2.5 backdrop-blur-sm">
               <button

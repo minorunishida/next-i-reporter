@@ -133,6 +133,36 @@ export type SheetStructure = {
   printMeta?: PrintMeta;
 };
 
+// --- ネットワーク機能 ---
+
+/** valueLink 1行: 親の値 → 子で選べる値の制限 */
+export type ValueLink = {
+  parentValue: string;
+  /** 子の Items の値をカンマ区切りで格納。値内のカンマは ,, にエスケープ済み */
+  selectValues: string;
+};
+
+/** クラスター間の接続 (ネットワーク) 1本分 */
+export type NetworkDefinition = {
+  /** 内部管理用 ID ("net-0" など)。XML には出力しない */
+  id: string;
+  /** 親クラスターの ClusterDefinition.id 形式 ("0-2") */
+  prevClusterId: string;
+  /** 子クラスターの ClusterDefinition.id 形式 */
+  nextClusterId: string;
+  nextAutoInputStart: 0 | 1;
+  relation: '' | 'GreaterEqual' | 'Greater' | 'Less' | 'LessEqual' | 'Equal' | 'NotEqual';
+  skip: 0 | 1 | 2;
+  requiredValue: string;
+  customMasterSearchField: string;
+  checkGroupIdMode: string;
+  noNeedToFillOut: 0 | 1 | 2;
+  terminalType: 0 | 1 | '';
+  nextAutoInput: 0 | 1;
+  nextAutoInputEdit: 0 | 1;
+  valueLinks: ValueLink[];
+};
+
 // --- 帳票構造 (中間表現のルート) ---
 
 export type FormStructure = {
@@ -148,6 +178,12 @@ export type FormStructure = {
   embeddedExcelFileName?: string;
   /** コメント付きセルのみ集約した連携用カタログ（parse-excel 等で付与） */
   cellCommentCatalog?: CellCommentCatalog;
+  /** ネットワーク接続定義 */
+  networks?: NetworkDefinition[];
+  /** 帳票全体: ネットワーク自動入力開始フラグ */
+  useNetworkAutoInputStart?: 0 | 1;
+  /** 帳票全体: ネットワーク応答モード */
+  networkAnswerbackMode?: 0 | 1;
 };
 
 // --- クラスター定義 (AI 推論結果) ---

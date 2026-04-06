@@ -12,8 +12,8 @@ import {
 type Props = {
   clusters: ClusterDefinition[];
   selectedIds: Set<string>;
-  editorMode: "select" | "create";
-  onModeChange: (mode: "select" | "create") => void;
+  editorMode: "select" | "create" | "network";
+  onModeChange: (mode: "select" | "create" | "network") => void;
   filterType: ClusterTypeName | "all";
   filterConfidence: "all" | "high" | "medium" | "low";
   searchQuery: string;
@@ -85,6 +85,23 @@ export default function ClusterToolbar({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               作成
+            </button>
+            <div className="w-px h-5 bg-slate-200" />
+            <button
+              onClick={() => onModeChange("network")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium transition-all duration-150 ${
+                editorMode === "network"
+                  ? "bg-indigo-50 text-indigo-700 shadow-inner"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              }`}
+              title="接続モード (L)"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <circle cx="3" cy="7" r="2" />
+                <circle cx="11" cy="7" r="2" />
+                <line x1="5" y1="7" x2="9" y2="7" />
+              </svg>
+              接続
             </button>
           </div>
 
