@@ -46,11 +46,22 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
       `</v:shapetype>`,
   );
 
+  /** Excel 既定のノート風（薄黄・枠は標準の黒系） */
+  const noteFill = "#FFFFE1";
+  const noteStroke = "#000000";
+
+  /** ノート枠の表示サイズ（SheetJS 既定 104×64pt を縦横とも約 5 倍） */
+  const LABEL_SCALE = 5;
+  const labelWpt = 104 * LABEL_SCALE;
+  const labelHpt = 64 * LABEL_SCALE;
+  /** Anchor: 元は列幅 2 セル・行 4 セル相当 → 同倍率で終点を伸ばす */
+  const anchorColSpan = 2 * LABEL_SCALE;
+  const anchorRowSpan = 4 * LABEL_SCALE;
+
   for (const ref of refs) {
     const c = XLSX.utils.decode_cell(ref);
     const hidden = false;
-    const fillparm = `<o:fill v:ext="view" type="gradientUnscaled"/>`;
-    const fillxml = `<v:fill color2="#BEFF82" type="gradient" angle="-180">${fillparm}</v:fill>`;
+    const fillxml = `<v:fill color="${noteFill}" type="solid"/>`;
     shapeId += 1;
 
     o.push(
@@ -58,10 +69,10 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
         id: `_x0000_s${shapeId}`,
         type: "#_x0000_t202",
         style:
-          "position:absolute; margin-left:80pt;margin-top:5pt;width:104pt;height:64pt;z-index:10" +
+          `position:absolute; margin-left:80pt;margin-top:5pt;width:${labelWpt}pt;height:${labelHpt}pt;z-index:10` +
           (hidden ? ";visibility:hidden" : ""),
-        fillcolor: "#ECFAD4",
-        strokecolor: "#edeaa1",
+        fillcolor: noteFill,
+        strokecolor: noteStroke,
       })}>` +
         fillxml +
         `<v:shadow on="t" obscured="t"/>` +
@@ -72,7 +83,16 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
         `<x:SizeWithCells/>` +
         writetag(
           "x:Anchor",
-          [c.c + 1, 0, c.r + 1, 0, c.c + 3, 20, c.r + 5, 20].join(","),
+          [
+            c.c + 1,
+            0,
+            c.r + 1,
+            0,
+            c.c + 1 + anchorColSpan,
+            20,
+            c.r + 1 + anchorRowSpan,
+            20,
+          ].join(","),
         ) +
         writetag("x:AutoFill", "False") +
         writetag("x:Row", String(c.r)) +
