@@ -60,7 +60,6 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
 
   for (const ref of refs) {
     const c = XLSX.utils.decode_cell(ref);
-    const hidden = false;
     const fillxml = `<v:fill color="${noteFill}" type="solid"/>`;
     shapeId += 1;
 
@@ -69,8 +68,8 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
         id: `_x0000_s${shapeId}`,
         type: "#_x0000_t202",
         style:
-          `position:absolute; margin-left:80pt;margin-top:5pt;width:${labelWpt}pt;height:${labelHpt}pt;z-index:10` +
-          (hidden ? ";visibility:hidden" : ""),
+          // visibility:hidden＝ノート枠は既定で非表示（セルを指すと表示）。x:Visible だけでは閉じない環境がある。
+          `position:absolute; margin-left:80pt;margin-top:5pt;width:${labelWpt}pt;height:${labelHpt}pt;z-index:10;visibility:hidden`,
         fillcolor: noteFill,
         strokecolor: noteStroke,
       })}>` +
@@ -97,7 +96,7 @@ export function buildVmlDrawingXml(sheetRId: number, refs: string[]): string {
         writetag("x:AutoFill", "False") +
         writetag("x:Row", String(c.r)) +
         writetag("x:Column", String(c.c)) +
-        (hidden ? "" : "<x:Visible/>") +
+        // <x:Visible/> は付けない＝既定は閉じたノート（セルを指す／クリックで表示）
         `</x:ClientData>` +
         `</v:shape>`,
     );

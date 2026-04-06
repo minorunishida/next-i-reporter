@@ -137,10 +137,10 @@ function buildCommentsXml(refToText: Map<string, string>): string {
   for (const ref of refs) {
     const text = refToText.get(ref) ?? "";
     const esc = escapeXml(text);
-    // 8pt（sz は半ポイント）・既定の黒・既定フォントに寄せる（見た目は VML の黄色ノートと揃える）
+    // 6pt（sz は半ポイント・8pt から 2 段階下げ）・既定の黒
     parts.push(
       `<comment ref="${escapeXml(ref)}" authorId="0"><text>` +
-        `<r><rPr><rFont val="Calibri"/><sz val="16"/><color rgb="FF000000"/></rPr>` +
+        `<r><rPr><rFont val="Calibri"/><sz val="12"/><color rgb="FF000000"/></rPr>` +
         `<t xml:space="preserve">${esc}</t></r>` +
         `</text></comment>`,
     );
