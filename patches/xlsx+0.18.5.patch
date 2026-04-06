@@ -1,0 +1,31 @@
+diff --git a/node_modules/xlsx/xlsx.js b/node_modules/xlsx/xlsx.js
+index e61c7cc..4086f05 100644
+--- a/node_modules/xlsx/xlsx.js
++++ b/node_modules/xlsx/xlsx.js
+@@ -11604,9 +11604,9 @@ function write_comments_vml(rId, comments) {
+ 
+ 	comments.forEach(function(x) {
+ 	var c = decode_cell(x[0]);
+-	var fillopts = {'color2':"#BEFF82", 'type':"gradient"};
+-	if(fillopts.type == "gradient") fillopts.angle = "-180";
+-	var fillparm = fillopts.type == "gradient" ? writextag("o:fill", null, {type:"gradientUnscaled", 'v:ext':"view"}) : null;
++	/* 標準の「ノート」に近い単色（SheetJS 既定の緑グラデは避ける） */
++	var fillopts = {'color':"#FFFFE1", 'type':"solid"};
++	var fillparm = null;
+ 	var fillxml = writextag('v:fill', fillparm, fillopts);
+ 
+ 	var shadata = ({on:"t", 'obscured':"t"});
+@@ -11616,9 +11616,10 @@ function write_comments_vml(rId, comments) {
+ 	'<v:shape' + wxt_helper({
+ 		id:'_x0000_s' + _shapeid,
+ 		type:"#_x0000_t202",
+-		style:"position:absolute; margin-left:80pt;margin-top:5pt;width:104pt;height:64pt;z-index:10" + (x[1].hidden ? ";visibility:hidden" : "") ,
+-		fillcolor:"#ECFAD4",
+-		strokecolor:"#edeaa1"
++		/* visibility:hidden は図形ごと消えセル角の印も出ない。閉じるのは x:Visible のみに任せる */
++		style:"position:absolute; margin-left:80pt;margin-top:5pt;width:104pt;height:64pt;z-index:10",
++		fillcolor:"#FFFFE1",
++		strokecolor:"#B2B2B2"
+ 	}) + '>',
+ 		fillxml,
+ 		writextag("v:shadow", null, shadata),

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { buildCellCommentCatalog } from "@/lib/cell-comment-catalog";
 import { parseExcel } from "@/lib/excel-parser";
 import { convertExcelToPdf } from "@/lib/excel-to-pdf";
 import { correctDimensionsFromPrintMeta } from "@/lib/dimension-corrector";
@@ -66,6 +67,9 @@ export async function POST(request: NextRequest) {
 
     // Excel バイナリを FormStructure に格納
     formStructure.excelBase64 = excelBase64;
+
+    // iReporter セルコメントの連携用カタログ（シート名・アドレス・パース結果）
+    formStructure.cellCommentCatalog = buildCellCommentCatalog(formStructure);
 
     return Response.json(formStructure);
   } catch (e) {

@@ -3,6 +3,8 @@
  * すべてのルート (Excel, 写真, 会話) がこの型に収束する
  */
 
+import type { ParseIReporterCommentResult } from "./cell-comment-parse";
+
 // --- セル構造 ---
 
 export type CellStyle = {
@@ -44,6 +46,25 @@ export type CellInfo = {
     min?: string;
     max?: string;
   };
+  /** iReporter Add-in 形式のセルコメント生テキスト（存在しない場合は undefined） */
+  commentRaw?: string;
+};
+
+/** シート名・アドレスと parse 結果をセットにした連携用カタログの1行 */
+export type CellCommentCatalogEntry = {
+  sheetName: string;
+  sheetIndex: number;
+  cell: string;
+  row: number;
+  col: number;
+  commentRaw: string;
+  parsed: ParseIReporterCommentResult;
+};
+
+/** Excel を正としたセルコメントカタログ（自動生成・B案の一部） */
+export type CellCommentCatalog = {
+  lastGeneratedAt: string;
+  entries: CellCommentCatalogEntry[];
 };
 
 // --- シート構造 ---
@@ -119,6 +140,8 @@ export type FormStructure = {
   sheets: SheetStructure[];
   pdfBase64?: string;     // 背景PDF (Base64) — プレビュー・座標表示用
   excelBase64?: string;   // Excel定義ファイル (Base64) — 計算式・出力マッピング用
+  /** コメント付きセルのみ集約した連携用カタログ（parse-excel 等で付与） */
+  cellCommentCatalog?: CellCommentCatalog;
 };
 
 // --- クラスター定義 (AI 推論結果) ---

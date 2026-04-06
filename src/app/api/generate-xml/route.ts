@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const xml = generateConmasXml(result);
+    const xml = await generateConmasXml(result);
     const fileName = result.formStructure.fileName.replace(/\.[^.]+$/, "") + "_conmas.xml";
 
     return new Response(xml, {

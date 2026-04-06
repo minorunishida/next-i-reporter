@@ -1,5 +1,7 @@
 import type { AnalysisResult, ClusterDefinition, SheetStructure } from "./form-structure";
+import { buildMergedCommentCatalog } from "./cell-comment-build";
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
+import { mergeCellCommentsIntoExcelBase64 } from "./excel-comment-writer";
 import { mapClusterRegionToPdf } from "./print-coord-mapper";
 
 /**
@@ -66,8 +68,9 @@ export function generateBlankPdfBase64(pageCount: number): string {
  * ゴールデンデータ ([V3.1_Sample]全インプットサンプル.xml) の要素順序・構造に完全準拠。
  * Designer の int.Parse / float.Parse / null アクセスに対して安全な値を設定。
  */
-export function generateConmasXml(result: AnalysisResult): string {
+export async function generateConmasXml(result: AnalysisResult): Promise<string> {
   const { formStructure, clusters } = result;
+  const commentCatalog = buildMergedCommentCatalog(formStructure, clusters);
   const fileName = formStructure.fileName.replace(/\.[^.]+$/, "");
   const now = new Date();
   const timestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
@@ -153,7 +156,12 @@ export function generateConmasXml(result: AnalysisResult): string {
   p("    <wholeImageSize></wholeImageSize>");
   p("    <saveIndividuallyImage>1</saveIndividuallyImage>");
   // 定義ファイル: Excel バイナリを Base64 で埋め込む (仕様: spec-excel-binary-in-conmas-xml.md)
-  const excelBase64 = formStructure.excelBase64 ?? "";
+  // cell-comment-spec: 16行LF・クラスタからの欠落セルへのコメント合成は buildMergedCommentCatalog
+  const excelBase64 = await mergeCellCommentsIntoExcelBase64(
+    formStructure.excelBase64 ?? "",
+    formStructure.fileName,
+    commentCatalog,
+  );
   const excelExt = excelBase64
     ? (formStructure.fileName.split(".").pop()?.toLowerCase() ?? "xlsx")
     : "";

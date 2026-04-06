@@ -130,6 +130,7 @@ function parseSheet(
       const formula = cell?.f ? String(cell.f) : undefined;
       const style = extractStyle(cell);
       const dataValidation = extractDataValidation(ws, address);
+      const commentRaw = extractCellCommentRaw(cell);
 
       cells.push({
         address,
@@ -137,6 +138,7 @@ function parseSheet(
         col: c,
         value,
         formula,
+        commentRaw,
         isMerged: !!merge,
         mergeRange: merge
           ? {
@@ -259,6 +261,61 @@ export function buildMergeMap(
     }
   }
   return map;
+}
+
+/**
+ * SheetJS のセルコメント配列（cell.c）から iReporter 用の raw テキストを結合する。
+ * 複数ブロック（スレッド等）は \\n で連結する。
+ * t が空のときは HTML（h）やリッチ文字列 XML（r）からプレーンを拾う。
+ */
+export function extractCellCommentRaw(
+  cell: XLSX.CellObject | undefined
+): string | undefined {
+  const blocks = cell?.c;
+  if (!blocks || !Array.isArray(blocks) || blocks.length === 0) return undefined;
+  const parts: string[] = [];
+  for (const block of blocks) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as { t?: string; h?: string; r?: string };
+    let text = "";
+    if (typeof b.t === "string" && b.t.length > 0) {
+      text = b.t;
+    } else if (typeof b.h === "string" && b.h.length > 0) {
+      text = stripCommentHtmlToPlain(b.h);
+    } else if (typeof b.r === "string" && b.r.length > 0) {
+      text = extractPlainFromCommentRichXml(b.r);
+    }
+    if (text.length > 0) parts.push(text);
+  }
+  if (parts.length === 0) return undefined;
+  return parts.join("\n");
+}
+
+function stripCommentHtmlToPlain(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"');
+}
+
+/** コメント内 <t>...</t> からプレーンを抽出（リッチラン） */
+function extractPlainFromCommentRichXml(r: string): string {
+  const chunks: string[] = [];
+  const re = /<(?:\w+:)?t[^>]*>([^<]*)<\/(?:\w+:)?t>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(r)) !== null) {
+    chunks.push(
+      m[1]
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+    );
+  }
+  if (chunks.length > 0) return chunks.join("");
+  return r.replace(/<[^>]+>/g, "");
 }
 
 export function getCellValue(cell: XLSX.CellObject): string {

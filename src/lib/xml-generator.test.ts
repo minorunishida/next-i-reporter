@@ -92,46 +92,46 @@ function makeMinimalResult(clusterOverrides?: Partial<ClusterDefinition>[]): Ana
   };
 }
 
-test("generateConmasXml: produces valid XML structure", () => {
+test("generateConmasXml: produces valid XML structure", async () => {
   const result = makeMinimalResult([{}]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   assert.ok(xml.startsWith('<?xml version="1.0"'));
   assert.ok(xml.includes("<conmas>"));
   assert.ok(xml.includes("</conmas>"));
   assert.ok(xml.includes("<defTopName>test</defTopName>"));
 });
 
-test("generateConmasXml: sheetCount matches sheet count", () => {
+test("generateConmasXml: sheetCount matches sheet count", async () => {
   const result = makeMinimalResult([{}]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   assert.ok(xml.includes("<sheetCount>1</sheetCount>"));
 });
 
-test("generateConmasXml: cluster count matches in output", () => {
+test("generateConmasXml: cluster count matches in output", async () => {
   const result = makeMinimalResult([{}, { name: "フィールド2", cellAddress: "B2" }]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   const clusterMatches = xml.match(/<cluster>/g);
   assert.equal(clusterMatches?.length, 2);
 });
 
-test("generateConmasXml: special characters in cluster name are escaped", () => {
+test("generateConmasXml: special characters in cluster name are escaped", async () => {
   const result = makeMinimalResult([{ name: 'テスト&<>"' }]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   assert.ok(xml.includes("テスト&amp;&lt;&gt;&quot;"));
 });
 
-test("generateConmasXml: passes validation", () => {
+test("generateConmasXml: passes validation", async () => {
   const result = makeMinimalResult([
     { name: "テキスト入力", type: 30, typeName: "KeyboardText" },
   ]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   const validation = validateConmasTemplate(xml);
   assert.equal(validation.ok, true, `Validation errors: ${validation.errors.map(e => e.message).join(", ")}`);
 });
 
-test("generateConmasXml: 0 clusters produces valid XML", () => {
+test("generateConmasXml: 0 clusters produces valid XML", async () => {
   const result = makeMinimalResult([]);
-  const xml = generateConmasXml(result);
+  const xml = await generateConmasXml(result);
   assert.ok(xml.includes("<clusters>"));
   assert.ok(xml.includes("</clusters>"));
   const clusterMatches = xml.match(/<cluster>/g);

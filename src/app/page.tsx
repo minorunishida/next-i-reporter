@@ -64,6 +64,7 @@ export default function Home() {
       // pdfBase64 を復元 (XML 生成時に必要)
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
+      result.formStructure.cellCommentCatalog = formStructure.cellCommentCatalog;
       setAnalysisResult(result);
       setStep("result");
       // 派手なクラッカー演出（3連発）
@@ -117,6 +118,7 @@ export default function Home() {
       const result: AnalysisResult = await res.json();
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
+      result.formStructure.cellCommentCatalog = formStructure.cellCommentCatalog;
       setAnalysisResult(result);
       setStep("result");
     } catch (e) {
