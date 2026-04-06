@@ -82,10 +82,15 @@ function setupIpcHandlers() {
     return {
       hasApiKey: Boolean(getEncryptedValue("OPENAI_API_KEY")),
       eprintCliPath: settings.EPRINT_CLI_PATH ?? "",
+      aiModel: settings.AI_MODEL ?? "",
+      aiBaseURL: settings.AI_BASE_URL ?? "",
+      aiSystemPrompt: settings.AI_SYSTEM_PROMPT ?? "",
+      aiRegionSystemPrompt: settings.AI_REGION_SYSTEM_PROMPT ?? "",
     };
   });
 
-  ipcMain.handle("settings:save", (_, { apiKey, eprintCliPath } = {}) => {
+  ipcMain.handle("settings:save", (_, data = {}) => {
+    const { apiKey, eprintCliPath } = data;
     if (typeof apiKey === "string") {
       if (apiKey === "") {
         deleteEncryptedValue("OPENAI_API_KEY");
@@ -101,6 +106,21 @@ function setupIpcHandlers() {
       writeSettings(s);
       process.env.EPRINT_CLI_PATH = eprintCliPath;
     }
+    // AI 設定（settings.json に保存、サーバー再起動不要）
+    const aiKeys = ["AI_MODEL", "AI_BASE_URL", "AI_SYSTEM_PROMPT", "AI_REGION_SYSTEM_PROMPT"];
+    const s = readSettings();
+    let aiChanged = false;
+    for (const key of aiKeys) {
+      if (typeof data[key] === "string") {
+        if (data[key] === "") {
+          delete s[key];
+        } else {
+          s[key] = data[key];
+        }
+        aiChanged = true;
+      }
+    }
+    if (aiChanged) writeSettings(s);
     logLine("settings:save completed");
     return { ok: true };
   });
@@ -155,6 +175,9 @@ function loadEnvFiles() {
   if (storedSettings.EPRINT_CLI_PATH) {
     process.env.EPRINT_CLI_PATH = storedSettings.EPRINT_CLI_PATH;
   }
+
+  // Next.js サーバーが settings.json を読むためのパス
+  process.env.USER_DATA_PATH = app.getPath("userData");
 }
 
 function logPath() {
@@ -238,7 +261,7 @@ async function startNextStandalone() {
   const nodeExe = resolveNodeOnPath();
   const useRealNode = Boolean(nodeExe);
 
-  const childEnv = { ...process.env, PORT: String(port), HOSTNAME: "127.0.0.1", NODE_ENV: "production" };
+  const childEnv = { ...process.env, PORT: String(port), HOSTNAME: "127.0.0.1", NODE_ENV: "production", USER_DATA_PATH: app.getPath("userData") };
   delete childEnv.ELECTRON_RUN_AS_NODE;
 
   const exe = useRealNode ? nodeExe : process.execPath;

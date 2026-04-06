@@ -2,13 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  DEFAULT_REGION_SYSTEM_PROMPT,
+} from "@/lib/ai-default-prompts";
 
 declare global {
   interface Window {
     electronAPI?: {
       isElectron: boolean;
-      getSettings: () => Promise<{ hasApiKey: boolean; eprintCliPath: string }>;
-      saveSettings: (s: { apiKey?: string; eprintCliPath?: string }) => Promise<{ ok: boolean }>;
+      getSettings: () => Promise<{
+        hasApiKey: boolean;
+        eprintCliPath: string;
+        aiModel: string;
+        aiBaseURL: string;
+        aiSystemPrompt: string;
+        aiRegionSystemPrompt: string;
+      }>;
+      saveSettings: (s: Record<string, string | undefined>) => Promise<{ ok: boolean }>;
       restartServer: () => Promise<{ ok: boolean; dev?: boolean }>;
       openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
     };
@@ -23,6 +34,10 @@ export default function SettingsPage() {
   const [hasApiKey, setHasApiKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [eprintCliPath, setEprintCliPath] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiBaseURL, setAiBaseURL] = useState("");
+  const [aiSystemPrompt, setAiSystemPrompt] = useState("");
+  const [aiRegionSystemPrompt, setAiRegionSystemPrompt] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -32,6 +47,10 @@ export default function SettingsPage() {
       window.electronAPI.getSettings().then((s) => {
         setHasApiKey(s.hasApiKey);
         setEprintCliPath(s.eprintCliPath);
+        setAiModel(s.aiModel);
+        setAiBaseURL(s.aiBaseURL);
+        setAiSystemPrompt(s.aiSystemPrompt);
+        setAiRegionSystemPrompt(s.aiRegionSystemPrompt);
         setLoading(false);
       });
     } else {
@@ -56,26 +75,28 @@ export default function SettingsPage() {
     setStatus("saving");
     setErrorMsg("");
     try {
-      const payload: { apiKey?: string; eprintCliPath?: string } = {
+      const payload: Record<string, string | undefined> = {
         eprintCliPath: eprintCliPath.trim(),
+        AI_MODEL: aiModel.trim(),
+        AI_BASE_URL: aiBaseURL.trim(),
+        AI_SYSTEM_PROMPT: aiSystemPrompt.trim(),
+        AI_REGION_SYSTEM_PROMPT: aiRegionSystemPrompt.trim(),
       };
-      // apiKeyInput が空 → 変更なし（クリアは別ボタン）
       if (apiKeyInput.trim()) {
         payload.apiKey = apiKeyInput.trim();
       }
       await window.electronAPI.saveSettings(payload);
 
-      setStatus("restarting");
-      const result = await window.electronAPI.restartServer();
-      if (result.dev) {
-        // 開発モード: サーバーは別プロセスのため手動再起動が必要
-        setStatus("saved");
-        setHasApiKey(apiKeyInput.trim() ? true : hasApiKey);
-        setApiKeyInput("");
-      } else {
-        // packaged: サーバー再起動 & ページ遷移済み
-        setStatus("saved");
-        setHasApiKey(apiKeyInput.trim() ? true : hasApiKey);
+      // API キー / eprint パスの変更時のみサーバー再起動
+      const needsRestart = Boolean(apiKeyInput.trim()) || Boolean(eprintCliPath.trim());
+      if (needsRestart) {
+        setStatus("restarting");
+        await window.electronAPI.restartServer();
+      }
+
+      setStatus("saved");
+      if (apiKeyInput.trim()) {
+        setHasApiKey(true);
         setApiKeyInput("");
       }
     } catch (e) {
@@ -113,6 +134,9 @@ export default function SettingsPage() {
         <div className="text-center text-sm text-slate-500">
           <p className="font-medium">この設定画面は Electron アプリ内でのみ利用できます。</p>
           <p className="mt-1 text-slate-400">開発時は <code className="font-mono">.env.local</code> を直接編集してください。</p>
+          <Link href="/" className="mt-3 inline-block text-indigo-500 hover:text-indigo-700 transition-colors">
+            戻る
+          </Link>
         </div>
       </main>
     );
@@ -137,7 +161,7 @@ export default function SettingsPage() {
         <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h2 className="text-sm font-semibold text-slate-800">OpenAI API キー</h2>
+              <h2 className="text-sm font-semibold text-slate-800">API キー</h2>
               <p className="mt-0.5 text-xs text-slate-400">
                 OS の暗号化機能 (DPAPI) で保護されます。平文では保存されません。
               </p>
@@ -207,6 +231,55 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* AI モデル設定 */}
+        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <h2 className="mb-3 text-sm font-semibold text-slate-800">AI モデル設定</h2>
+
+          <div className="mb-4">
+            <label className="mb-1 block text-xs font-medium text-slate-600">モデル名</label>
+            <input
+              type="text"
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              placeholder="gpt-5.1"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+            <p className="mt-1 text-[11px] text-slate-400">空欄 = gpt-5.1</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-600">API ベース URL</label>
+            <input
+              type="text"
+              value={aiBaseURL}
+              onChange={(e) => setAiBaseURL(e.target.value)}
+              placeholder="空欄 = OpenAI 標準エンドポイント"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+            <p className="mt-1 text-[11px] text-slate-400">
+              OpenAI 互換 API を使用する場合に指定。例: Gemini は <code className="font-mono">https://generativelanguage.googleapis.com/v1beta/openai/</code>
+            </p>
+          </div>
+        </section>
+
+        {/* 帳票解析プロンプト */}
+        <PromptSection
+          title="帳票解析プロンプト"
+          description="Excel ファイル全体を解析するときのシステムプロンプト"
+          value={aiSystemPrompt}
+          onChange={setAiSystemPrompt}
+          defaultValue={DEFAULT_SYSTEM_PROMPT}
+        />
+
+        {/* 領域解析プロンプト */}
+        <PromptSection
+          title="領域解析プロンプト"
+          description="ユーザーが選択した領域を解析するときのシステムプロンプト"
+          value={aiRegionSystemPrompt}
+          onChange={setAiRegionSystemPrompt}
+          defaultValue={DEFAULT_REGION_SYSTEM_PROMPT}
+        />
+
         {/* 保存ボタン / ステータス */}
         <div className="flex items-center gap-3">
           <button
@@ -243,10 +316,82 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <p className="mt-4 text-xs text-slate-400">
-          保存後、アプリ内サーバーを自動で再起動して設定を反映します。
+        <p className="mt-4 mb-8 text-xs text-slate-400">
+          API キー・eprint パスの変更はサーバー再起動で反映。AI 設定（モデル・プロンプト）は即時反映されます。
         </p>
       </div>
     </main>
+  );
+}
+
+function PromptSection({
+  title,
+  description,
+  value,
+  onChange,
+  defaultValue,
+}: {
+  title: string;
+  description: string;
+  value: string;
+  onChange: (v: string) => void;
+  defaultValue: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const displayValue = value || defaultValue;
+  const isDefault = !value || value === defaultValue;
+
+  return (
+    <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+          <p className="mt-0.5 text-xs text-slate-400">{description}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isDefault && (
+            <span className="text-[11px] text-slate-400">デフォルト</span>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs text-slate-500 hover:bg-slate-50 transition-colors"
+          >
+            {expanded ? "閉じる" : "編集"}
+          </button>
+        </div>
+      </div>
+
+      {!expanded && (
+        <pre className="max-h-20 overflow-hidden rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500 font-mono whitespace-pre-wrap">
+          {displayValue.slice(0, 200)}...
+        </pre>
+      )}
+
+      {expanded && (
+        <>
+          <textarea
+            value={displayValue}
+            onChange={(e) => onChange(e.target.value)}
+            rows={16}
+            className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-mono leading-relaxed text-slate-700 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            style={{ minHeight: "200px" }}
+          />
+          {!isDefault && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm("デフォルトのプロンプトに戻しますか？")) {
+                  onChange("");
+                }
+              }}
+              className="mt-2 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50 transition-colors"
+            >
+              デフォルトに戻す
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }
