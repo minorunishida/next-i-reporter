@@ -9,6 +9,7 @@ import type {
   FormStructure,
   SheetStructure,
   ClusterDefinition,
+  CarbonCopyTarget,
   NetworkDefinition,
   ValueLink,
   AnalysisResult,
@@ -84,6 +85,7 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
   const sheets: SheetStructure[] = [];
   const allClusters: ClusterDefinition[] = [];
   let clusterIdCounter = 0;
+  const rawCarbonCopies = new Map<string, Array<{ sheetNo: number; clusterId: number; edit: 0 | 1 }>>();
 
   for (const sheetXml of sheetXmls) {
     const sheetNo = getTagNum(sheetXml, "sheetNo", 1);
@@ -149,8 +151,32 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
         formula: getTagText(clusterXml, "function") || undefined,
       };
 
+      const ccMatch = clusterXml.match(/<carbonCopy>([\s\S]*?)<\/carbonCopy>/);
+      if (ccMatch && ccMatch[1].trim()) {
+        const targetXmls = getAllTags(ccMatch[1], "targetCluster");
+        if (targetXmls.length > 0) {
+          rawCarbonCopies.set(cluster.id, targetXmls.map((tx) => ({
+            sheetNo: getTagNum(tx, "sheetNo", 1),
+            clusterId: getTagNum(tx, "clusterId", 0),
+            edit: (getTagNum(tx, "edit", 0)) as 0 | 1,
+          })));
+        }
+      }
+
       allClusters.push(cluster);
     }
+  }
+
+  // carbonCopy 解決 (クラスターを全部パースした後に実施)
+  for (const [srcId, targets] of rawCarbonCopies) {
+    const srcCluster = allClusters.find((c) => c.id === srcId);
+    if (!srcCluster) continue;
+    const resolved: CarbonCopyTarget[] = targets.flatMap((t) => {
+      const internalId = resolveInternalId(t.sheetNo, t.clusterId, allClusters);
+      if (!internalId) return [];
+      return [{ targetClusterId: internalId, edit: t.edit }];
+    });
+    if (resolved.length > 0) srcCluster.carbonCopy = resolved;
   }
 
   // networks パース (クラスターを全部パースした後に実施)

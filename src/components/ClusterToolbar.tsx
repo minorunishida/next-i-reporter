@@ -12,8 +12,8 @@ import {
 type Props = {
   clusters: ClusterDefinition[];
   selectedIds: Set<string>;
-  editorMode: "select" | "create" | "network";
-  onModeChange: (mode: "select" | "create" | "network") => void;
+  editorMode: "select" | "create" | "network" | "carbonCopy";
+  onModeChange: (mode: "select" | "create" | "network" | "carbonCopy") => void;
   filterType: ClusterTypeName | "all";
   filterConfidence: "all" | "high" | "medium" | "low";
   searchQuery: string;
@@ -102,6 +102,22 @@ export default function ClusterToolbar({
                 <line x1="5" y1="7" x2="9" y2="7" />
               </svg>
               接続
+            </button>
+            <div className="w-px h-5 bg-slate-200" />
+            <button
+              onClick={() => onModeChange("carbonCopy")}
+              className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium transition-all duration-150 ${
+                editorMode === "carbonCopy"
+                  ? "bg-emerald-50 text-emerald-700 shadow-inner"
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+              }`}
+              title="カーボンコピーモード (C)"
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                <rect x="1" y="1" width="8" height="8" rx="1" />
+                <rect x="5" y="5" width="8" height="8" rx="1" />
+              </svg>
+              コピー
             </button>
           </div>
 

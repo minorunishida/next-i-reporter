@@ -163,6 +163,16 @@ export type NetworkDefinition = {
   valueLinks: ValueLink[];
 };
 
+// --- カーボンコピー機能 ---
+
+/** カーボンコピー先 1件 */
+export type CarbonCopyTarget = {
+  /** コピー先クラスターの ClusterDefinition.id 形式 ("0-2") */
+  targetClusterId: string;
+  /** 0: ロック（編集不可）, 1: 編集可 */
+  edit: 0 | 1;
+};
+
 // --- 帳票構造 (中間表現のルート) ---
 
 export type FormStructure = {
@@ -231,6 +241,8 @@ export type ClusterDefinition = {
   inputParameters: string;      // "key1=value1;key2=value2" 形式
   excelOutputValue?: string;
   formula?: string;             // Excel 数式（Calculate 型の場合）
+  /** カーボンコピー設定（このクラスターをコピー元とする場合） */
+  carbonCopy?: CarbonCopyTarget[];
 };
 
 export type AnalysisResult = {

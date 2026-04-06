@@ -37,6 +37,7 @@ type Props = {
   networks?: NetworkDefinition[];
   selectedNetworkId?: string | null;
   onNetworksChange?: (networks: NetworkDefinition[]) => void;
+  onCarbonCopyChange?: (clusters: ClusterDefinition[]) => void;
 };
 
 // ─── Type labels (レジストリから導出) ────────────────────────────────────────
@@ -71,7 +72,7 @@ const BASE_PAPER_WIDTH_PX = 600;
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-export default function ClusterEditor({ analysisResult, formStructure, onClustersChange, networks, selectedNetworkId, onNetworksChange }: Props) {
+export default function ClusterEditor({ analysisResult, formStructure, onClustersChange, networks, selectedNetworkId, onNetworksChange, onCarbonCopyChange }: Props) {
   const clusters = analysisResult.clusters;
 
   // --- Local state ---
@@ -83,10 +84,13 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   const [searchQuery, setSearchQuery] = useState("");
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number; clusterId: string } | null>(null);
   const [zoom, setZoom] = useState(1.0);
-  const [editorMode, setEditorMode] = useState<"select" | "create" | "network">("select");
+  const [editorMode, setEditorMode] = useState<"select" | "create" | "network" | "carbonCopy">("select");
   const [showNetworkLines, setShowNetworkLines] = useState(true);
+  const [showCarbonCopyLines, setShowCarbonCopyLines] = useState(true);
   // ネットワーク接続モード: 最初にクリックした（親）クラスターID
   const [networkFromId, setNetworkFromId] = useState<string | null>(null);
+  // カーボンコピーモード: コピー元クラスターID
+  const [carbonCopyFromId, setCarbonCopyFromId] = useState<string | null>(null);
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(3.0, Math.round((z + 0.1) * 10) / 10)), []);
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(0.5, Math.round((z - 0.1) * 10) / 10)), []);
@@ -175,6 +179,28 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         return;
       }
 
+      if (editorMode === "carbonCopy" && onCarbonCopyChange) {
+        if (!carbonCopyFromId) {
+          setCarbonCopyFromId(id);
+        } else if (carbonCopyFromId !== id) {
+          const srcCluster = clusters.find((c) => c.id === carbonCopyFromId);
+          if (srcCluster) {
+            const existing = srcCluster.carbonCopy ?? [];
+            const alreadyLinked = existing.some((t) => t.targetClusterId === id);
+            if (!alreadyLinked) {
+              const updated = clusters.map((c) =>
+                c.id === carbonCopyFromId
+                  ? { ...c, carbonCopy: [...existing, { targetClusterId: id, edit: 0 as const }] }
+                  : c
+              );
+              onCarbonCopyChange(updated);
+            }
+          }
+          setCarbonCopyFromId(null);
+        }
+        return;
+      }
+
       setSelectedId(id);
       // Shift or Ctrl/Cmd for multi-select
       if (e.shiftKey || e.metaKey || e.ctrlKey) {
@@ -188,7 +214,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         setSelectedIds(new Set([id]));
       }
     },
-    [editorMode, networkFromId, networks, onNetworksChange]
+    [editorMode, networkFromId, networks, onNetworksChange, carbonCopyFromId, clusters, onCarbonCopyChange]
   );
 
   const handleContextMenu = useCallback(
@@ -254,10 +280,11 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
 
       // Mode switching
       switch (e.key) {
-        case "n": case "N": setEditorMode("create"); setNetworkFromId(null); return;
-        case "v": case "V": setEditorMode("select"); setNetworkFromId(null); return;
-        case "l": case "L": setEditorMode("network"); return;
-        case "Escape": setEditorMode("select"); setNetworkFromId(null); return;
+        case "n": case "N": setEditorMode("create"); setNetworkFromId(null); setCarbonCopyFromId(null); return;
+        case "v": case "V": setEditorMode("select"); setNetworkFromId(null); setCarbonCopyFromId(null); return;
+        case "l": case "L": setEditorMode("network"); setCarbonCopyFromId(null); return;
+        case "c": case "C": setEditorMode("carbonCopy"); setNetworkFromId(null); return;
+        case "Escape": setEditorMode("select"); setNetworkFromId(null); setCarbonCopyFromId(null); return;
       }
 
       // Nudge (only when clusters are selected)
@@ -386,25 +413,50 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
         onNudge={handleNudge}
       />
 
-      {/* ネットワーク接続線トグル */}
-      {networks && networks.length > 0 && (
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowNetworkLines((v) => !v)}
-            className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border transition-colors ${
-              showNetworkLines
-                ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
-            }`}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
-              <circle cx="3" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
-              <circle cx="11" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
-              <line x1="5" y1="7" x2="9" y2="7" stroke={showNetworkLines ? "#6366f1" : "#9ca3af"} strokeWidth="1.5" markerEnd="url(#a)" />
-            </svg>
-            接続線 {showNetworkLines ? "表示中" : "非表示"}
-          </button>
-          <span className="text-xs text-gray-400">{networks.length} 件の接続</span>
+      {/* 接続線トグル */}
+      {((networks && networks.length > 0) || clusters.some((c) => c.carbonCopy?.length)) && (
+        <div className="flex items-center gap-3 flex-wrap">
+          {networks && networks.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowNetworkLines((v) => !v)}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border transition-colors ${
+                  showNetworkLines
+                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                    : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                }`}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
+                  <circle cx="3" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
+                  <circle cx="11" cy="7" r="2" fill={showNetworkLines ? "#6366f1" : "#9ca3af"} />
+                  <line x1="5" y1="7" x2="9" y2="7" stroke={showNetworkLines ? "#6366f1" : "#9ca3af"} strokeWidth="1.5" />
+                </svg>
+                接続線 {showNetworkLines ? "表示中" : "非表示"}
+              </button>
+              <span className="text-xs text-gray-400">{networks.length} 件</span>
+            </div>
+          )}
+          {clusters.some((c) => c.carbonCopy?.length) && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCarbonCopyLines((v) => !v)}
+                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border transition-colors ${
+                  showCarbonCopyLines
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                    : "bg-white border-gray-300 text-gray-500 hover:border-gray-400"
+                }`}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0">
+                  <rect x="1" y="1" width="7" height="7" rx="1" stroke={showCarbonCopyLines ? "#10b981" : "#9ca3af"} strokeWidth="1.5" />
+                  <rect x="6" y="6" width="7" height="7" rx="1" stroke={showCarbonCopyLines ? "#10b981" : "#9ca3af"} strokeWidth="1.5" />
+                </svg>
+                コピー線 {showCarbonCopyLines ? "表示中" : "非表示"}
+              </button>
+              <span className="text-xs text-gray-400">
+                {clusters.reduce((n, c) => n + (c.carbonCopy?.length ?? 0), 0)} 件
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -577,6 +629,8 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
               selectedNetworkId={selectedNetworkId}
               showNetworkLines={showNetworkLines}
               networkFromId={networkFromId}
+              showCarbonCopyLines={showCarbonCopyLines}
+              carbonCopyFromId={carbonCopyFromId}
             />
           </div>
         </div>
@@ -990,6 +1044,8 @@ function VisualPreview({
   selectedNetworkId,
   showNetworkLines = true,
   networkFromId = null,
+  showCarbonCopyLines = true,
+  carbonCopyFromId = null,
 }: {
   sheet: SheetStructure;
   clusters: ClusterDefinition[];
@@ -1006,18 +1062,23 @@ function VisualPreview({
   pdfBase64?: string;
   activeSheetIndex: number;
   zoom?: number;
-  editorMode?: "select" | "create" | "network";
+  editorMode?: "select" | "create" | "network" | "carbonCopy";
   onCreateDragEnd?: (region: { top: number; bottom: number; left: number; right: number; screenX: number; screenY: number }) => void;
   networks?: NetworkDefinition[];
   selectedNetworkId?: string | null;
   showNetworkLines?: boolean;
   networkFromId?: string | null;
+  showCarbonCopyLines?: boolean;
+  carbonCopyFromId?: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const editorModeIsNetwork = editorMode === "network";
+  const editorModeIsCarbonCopy = editorMode === "carbonCopy";
 
   const [networkMousePos, setNetworkMousePos] = useState<{ x: number; y: number } | null>(null);
+  const [carbonCopyMousePos, setCarbonCopyMousePos] = useState<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
     if (!editorModeIsNetwork || !networkFromId || !containerRef.current) {
       setNetworkMousePos(null);
@@ -1035,6 +1096,24 @@ function VisualPreview({
     el.addEventListener("mousemove", handler);
     return () => { el.removeEventListener("mousemove", handler); cancelAnimationFrame(rafId); };
   }, [editorModeIsNetwork, networkFromId, zoom]);
+
+  useEffect(() => {
+    if (!editorModeIsCarbonCopy || !carbonCopyFromId || !containerRef.current) {
+      setCarbonCopyMousePos(null);
+      return;
+    }
+    const el = containerRef.current;
+    let rafId = 0;
+    const handler = (e: MouseEvent) => {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const rect = el.getBoundingClientRect();
+        setCarbonCopyMousePos({ x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom });
+      });
+    };
+    el.addEventListener("mousemove", handler);
+    return () => { el.removeEventListener("mousemove", handler); cancelAnimationFrame(rafId); };
+  }, [editorModeIsCarbonCopy, carbonCopyFromId, zoom]);
 
   const usePdfMode = !!pdfBase64 && !!sheet.printMeta;
 
@@ -1326,6 +1405,7 @@ function VisualPreview({
     const isSelected = cluster.id === selectedId;
     const isInGroup = selectedIds.has(cluster.id);
     const isNetworkFrom = editorModeIsNetwork && cluster.id === networkFromId;
+    const isCarbonCopyFrom = editorModeIsCarbonCopy && cluster.id === carbonCopyFromId;
     const cc = confidenceColor(cluster.confidence);
 
     let top: number, left: number, width: number, height: number;
@@ -1353,28 +1433,32 @@ function VisualPreview({
         onClick={(e) => onClusterClick(cluster.id, e)}
         onContextMenu={(e) => onContextMenu(cluster.id, e)}
         className={`absolute transition-all duration-150 ${
-          editorModeIsNetwork ? "cursor-cell" : "cursor-default"
+          editorModeIsNetwork || editorModeIsCarbonCopy ? "cursor-cell" : "cursor-default"
         }`}
         style={{
           top,
           left,
           width,
           height,
-          backgroundColor: isNetworkFrom ? "rgba(99,102,241,0.25)" : cc.bg,
+          backgroundColor: isNetworkFrom ? "rgba(99,102,241,0.25)" : isCarbonCopyFrom ? "rgba(16,185,129,0.25)" : cc.bg,
           border: isNetworkFrom
             ? "2px solid rgb(99,102,241)"
-            : isSelected
-              ? "2px solid rgb(59,130,246)"
-              : isInGroup
-                ? "2px solid rgb(147,197,253)"
-              : `1.5px solid ${cc.border}`,
+            : isCarbonCopyFrom
+              ? "2px solid rgb(16,185,129)"
+              : isSelected
+                ? "2px solid rgb(59,130,246)"
+                : isInGroup
+                  ? "2px solid rgb(147,197,253)"
+                : `1.5px solid ${cc.border}`,
           borderRadius: 3,
-          zIndex: isNetworkFrom ? 40 : isSelected ? 30 : isInGroup ? 20 : 10,
+          zIndex: isNetworkFrom || isCarbonCopyFrom ? 40 : isSelected ? 30 : isInGroup ? 20 : 10,
           boxShadow: isNetworkFrom
             ? "0 0 0 4px rgba(99,102,241,0.3)"
-            : isSelected
-              ? "0 0 0 3px rgba(59,130,246,0.2)"
-              : undefined,
+            : isCarbonCopyFrom
+              ? "0 0 0 4px rgba(16,185,129,0.3)"
+              : isSelected
+                ? "0 0 0 3px rgba(59,130,246,0.2)"
+                : undefined,
         }}
         title={`${cluster.name} (${TYPE_LABELS[cluster.typeName]}) — ${Math.round(cluster.confidence * 100)}%`}
       >
@@ -1425,7 +1509,7 @@ function VisualPreview({
       ref={containerRef}
       onMouseDown={(e) => { handleRubberBandStart(e); handleCreateDragStart(e); }}
       className={`bg-white shadow-xl ring-1 ring-slate-200/80 flex-shrink-0 relative transition-all duration-300 ease-in-out ${
-        editorMode === "create" ? "cursor-crosshair" : editorModeIsNetwork ? "cursor-cell" : ""
+        editorMode === "create" ? "cursor-crosshair" : (editorModeIsNetwork || editorModeIsCarbonCopy) ? "cursor-cell" : ""
       }`}
       style={{
         width: paperDims.wPx,
@@ -1618,6 +1702,79 @@ function VisualPreview({
                   </marker>
                 </defs>
                 {lines}
+              </svg>
+            );
+          }
+        }
+
+        // カーボンコピー線
+        if (showCarbonCopyLines) {
+          const centerMap = new Map<string, { x: number; y: number }>();
+          for (const c of allClusters) {
+            const pt = clusterCenter(c);
+            if (pt) centerMap.set(c.id, pt);
+          }
+
+          const ccLines = allClusters.flatMap((src, i) => {
+            if (!src.carbonCopy || src.carbonCopy.length === 0) return [];
+            const from = centerMap.get(src.id);
+            if (!from) return [];
+            return src.carbonCopy.flatMap((target, j) => {
+              const to = centerMap.get(target.targetClusterId);
+              if (!to) return [];
+              const dx = to.x - from.x, dy = to.y - from.y;
+              if (dx * dx + dy * dy < 1) return [];
+              return [(
+                <g key={`cc-${i}-${j}`} opacity={0.65}>
+                  <line
+                    x1={from.x} y1={from.y} x2={to.x} y2={to.y}
+                    stroke="#10b981" strokeWidth={2}
+                    markerEnd="url(#cc-arrow)"
+                  />
+                </g>
+              )];
+            });
+          });
+
+          if (ccLines.length > 0) {
+            svgs.push(
+              <svg
+                key="cc-lines"
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 54 }}
+                width={paperDims.wPx} height={paperDims.hPx}
+                viewBox={`0 0 ${paperDims.wPx} ${paperDims.hPx}`}
+              >
+                <defs>
+                  <marker id="cc-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                    <path d="M0,0 L0,6 L8,3 z" fill="#10b981" />
+                  </marker>
+                </defs>
+                {ccLines}
+              </svg>
+            );
+          }
+        }
+
+        // カーボンコピー仮線 (fromクラスター → マウス)
+        if (editorModeIsCarbonCopy && carbonCopyFromId && carbonCopyMousePos) {
+          const fromCluster = allClusters.find((c) => c.id === carbonCopyFromId);
+          const fromPt = fromCluster ? clusterCenter(fromCluster) : null;
+          if (fromPt) {
+            svgs.push(
+              <svg
+                key="cc-drag"
+                className="absolute inset-0 pointer-events-none"
+                style={{ zIndex: 60 }}
+                width={paperDims.wPx} height={paperDims.hPx}
+                viewBox={`0 0 ${paperDims.wPx} ${paperDims.hPx}`}
+              >
+                <line
+                  x1={fromPt.x} y1={fromPt.y}
+                  x2={carbonCopyMousePos.x} y2={carbonCopyMousePos.y}
+                  stroke="#34d399" strokeWidth={2} strokeDasharray="6 3" opacity={0.8}
+                />
+                <circle cx={fromPt.x} cy={fromPt.y} r={4} fill="#10b981" />
               </svg>
             );
           }

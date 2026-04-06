@@ -1,4 +1,4 @@
-import type { AnalysisResult, ClusterDefinition, NetworkDefinition, SheetStructure } from "./form-structure";
+import type { AnalysisResult, CarbonCopyTarget, ClusterDefinition, NetworkDefinition, SheetStructure } from "./form-structure";
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
 import { buildMergedDefinitionExcelBase64 } from "./excel-definition-export";
 import { isXlsxZipBuffer } from "./excel-comment-writer";
@@ -282,7 +282,7 @@ function appendConmasTopInnerAfterEmbeds(
   p("    <sheets>");
   for (const sheet of formStructure.sheets) {
     const sc = clusters.filter((c) => c.sheetNo === sheet.index && c.type !== 20);
-    L.push(...genSheet(sheet, sc));
+    L.push(...genSheet(sheet, sc, clusters));
   }
   p("    </sheets>");
 }
@@ -441,7 +441,7 @@ export async function generateConmasXml(result: AnalysisResult): Promise<string>
   return L.join("\n");
 }
 
-function genSheet(sheet: SheetStructure, clusters: ClusterDefinition[]): string[] {
+function genSheet(sheet: SheetStructure, clusters: ClusterDefinition[], allClusters: ClusterDefinition[]): string[] {
   const L: string[] = [];
   const p = (line: string) => L.push(line);
 
@@ -469,14 +469,14 @@ function genSheet(sheet: SheetStructure, clusters: ClusterDefinition[]): string[
   }
   p("        <references></references>");
   p("        <clusters>");
-  clusters.forEach((c, idx) => L.push(...genCluster(c, idx, sheet)));
+  clusters.forEach((c, idx) => L.push(...genCluster(c, idx, sheet, allClusters)));
   p("        </clusters>");
   p("      </sheet>");
 
   return L;
 }
 
-function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): string[] {
+function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure, allClusters: ClusterDefinition[]): string[] {
   let top: number, bottom: number, left: number, right: number;
 
   if (sheet.printMeta) {
@@ -536,7 +536,21 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure): st
   p("          <originalFunction></originalFunction>");
   p("          <excelOutputValue></excelOutputValue>");
   p(`          <inputParameters>${esc(c.inputParameters)}</inputParameters>`);
-  p("          <carbonCopy></carbonCopy>");
+  if (c.carbonCopy && c.carbonCopy.length > 0) {
+    p("          <carbonCopy>");
+    for (const target of c.carbonCopy) {
+      const resolved = resolveClusterXmlIds(target.targetClusterId, allClusters);
+      if (!resolved) continue;
+      p("            <targetCluster>");
+      p(`              <sheetNo>${resolved.sheetNo}</sheetNo>`);
+      p(`              <clusterId>${resolved.clusterId}</clusterId>`);
+      p(`              <edit>${target.edit}</edit>`);
+      p("            </targetCluster>");
+    }
+    p("          </carbonCopy>");
+  } else {
+    p("          <carbonCopy></carbonCopy>");
+  }
   p("          <userCustomMaster>");
   p("            <masterTableId></masterTableId>");
   p("            <masterKey></masterKey>");

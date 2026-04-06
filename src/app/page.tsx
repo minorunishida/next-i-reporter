@@ -21,6 +21,7 @@ import ExcelUploader from "@/components/ExcelUploader";
 import FormPreview from "@/components/FormPreview";
 import ClusterEditor from "@/components/ClusterEditor";
 import { NetworkEditor } from "@/components/NetworkEditor";
+import { CarbonCopyEditor } from "@/components/CarbonCopyEditor";
 import type { FormStructure, AnalysisResult, ClusterDefinition, NetworkDefinition } from "@/lib/form-structure";
 import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 
@@ -31,7 +32,7 @@ export default function Home() {
   const [formStructure, setFormStructure] = useState<FormStructure | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"clusters" | "networks">("clusters");
+  const [activeTab, setActiveTab] = useState<"clusters" | "networks" | "carbonCopy">("clusters");
   const [selectedNetworkId, setSelectedNetworkId] = useState<string | null>(null);
 
   const handleParsed = useCallback((data: FormStructure) => {
@@ -111,6 +112,25 @@ export default function Home() {
       return {
         ...prev,
         formStructure: { ...prev.formStructure, networks },
+      };
+    });
+  }, []);
+
+  const handleCarbonCopyChange = useCallback((clusters: ClusterDefinition[]) => {
+    setAnalysisResult((prev) => {
+      if (!prev) return prev;
+      const highConfidence = clusters.filter((c) => c.confidence >= 0.9).length;
+      const mediumConfidence = clusters.filter((c) => c.confidence >= 0.7 && c.confidence < 0.9).length;
+      const lowConfidence = clusters.filter((c) => c.confidence < 0.7).length;
+      return {
+        ...prev,
+        clusters,
+        summary: {
+          totalClusters: clusters.length,
+          highConfidence,
+          mediumConfidence,
+          lowConfidence,
+        },
       };
     });
   }, []);
@@ -344,6 +364,21 @@ export default function Home() {
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setActiveTab("carbonCopy")}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                  activeTab === "carbonCopy"
+                    ? "border-emerald-500 text-emerald-700"
+                    : "border-transparent text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                カーボンコピー
+                {analysisResult.clusters.some((c) => c.carbonCopy?.length) && (
+                  <span className="inline-flex items-center justify-center text-xs bg-emerald-100 text-emerald-700 rounded-full px-1.5 min-w-[1.25rem] h-5">
+                    {analysisResult.clusters.reduce((n, c) => n + (c.carbonCopy?.length ?? 0), 0)}
+                  </span>
+                )}
+              </button>
             </div>
 
             {activeTab === "clusters" && (
@@ -354,6 +389,7 @@ export default function Home() {
                 networks={analysisResult.formStructure.networks}
                 selectedNetworkId={selectedNetworkId}
                 onNetworksChange={handleNetworksChange}
+                onCarbonCopyChange={handleCarbonCopyChange}
               />
             )}
 
@@ -365,6 +401,16 @@ export default function Home() {
                   sheets={analysisResult.formStructure.sheets}
                   onChange={handleNetworksChange}
                   onSelectNetwork={setSelectedNetworkId}
+                />
+              </div>
+            )}
+
+            {activeTab === "carbonCopy" && (
+              <div className="h-[600px]">
+                <CarbonCopyEditor
+                  clusters={analysisResult.clusters}
+                  sheets={analysisResult.formStructure.sheets}
+                  onChange={handleCarbonCopyChange}
                 />
               </div>
             )}
