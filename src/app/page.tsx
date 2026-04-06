@@ -64,6 +64,7 @@ export default function Home() {
       // pdfBase64 を復元 (XML 生成時に必要)
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
+      result.formStructure.embeddedExcelFileName = formStructure.embeddedExcelFileName;
       result.formStructure.cellCommentCatalog = formStructure.cellCommentCatalog;
       setAnalysisResult(result);
       setStep("result");
@@ -118,6 +119,7 @@ export default function Home() {
       const result: AnalysisResult = await res.json();
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
+      result.formStructure.embeddedExcelFileName = formStructure.embeddedExcelFileName;
       result.formStructure.cellCommentCatalog = formStructure.cellCommentCatalog;
       setAnalysisResult(result);
       setStep("result");
@@ -307,7 +309,7 @@ export default function Home() {
               onClustersChange={handleClustersChange}
             />
 
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <button
                 onClick={handleReanalyze}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors duration-150"
@@ -320,6 +322,53 @@ export default function Home() {
                 </span>
               </button>
               <button
+                type="button"
+                disabled={!analysisResult.formStructure.excelBase64?.trim()}
+                title={
+                  analysisResult.formStructure.excelBase64?.trim()
+                    ? undefined
+                    : "Excel から取り込んだ帳票、または定義ファイル付き XML のみダウンロードできます"
+                }
+                onClick={async () => {
+                  if (!analysisResult) return;
+                  try {
+                    const res = await fetch("/api/generate-excel-definition", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(analysisResult),
+                    });
+                    if (!res.ok) {
+                      const body = await res.json();
+                      throw new Error(body.error ?? "Excel 定義の生成に失敗しました");
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    const baseDl =
+                      analysisResult.formStructure.embeddedExcelFileName?.trim() ||
+                      analysisResult.formStructure.fileName ||
+                      "definition.xlsx";
+                    a.download = /\.xml$/i.test(baseDl)
+                      ? baseDl.replace(/\.xml$/i, ".xlsx")
+                      : baseDl;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Excel 定義の生成に失敗しました");
+                  }
+                }}
+                className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-[#217346] hover:bg-[#1a5c38] shadow-sm transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#217346]"
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Excel 定義をダウンロード
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={async () => {
                   if (!analysisResult) return;
                   try {

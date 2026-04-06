@@ -3,7 +3,6 @@ import { buildCellCommentCatalog } from "@/lib/cell-comment-catalog";
 import { parseExcel } from "@/lib/excel-parser";
 import { convertExcelToPdf } from "@/lib/excel-to-pdf";
 import { correctDimensionsFromPrintMeta } from "@/lib/dimension-corrector";
-import { removeExcelOutputSetting } from "@/lib/excel-cleaner";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -32,10 +31,8 @@ export async function POST(request: NextRequest) {
 
     const buffer = await file.arrayBuffer();
 
-    // Excel バイナリを Base64 保持 (definitionFile 用)
-    // ExcelOutputSetting を除去: Designer が定義出力時に新規作成するため、
-    // 既存のものがあるとシート名重複エラーになる (仕様 §3.5)
-    const excelBase64 = await removeExcelOutputSetting(Buffer.from(buffer));
+    // Excel バイナリを Base64 保持 (definitionFile 用)。ブックはそのまま保持。
+    const excelBase64 = Buffer.from(buffer).toString("base64");
 
     // Excel 解析 + PDF 変換を並列実行
     const [formStructure, conversionResult] = await Promise.all([
@@ -67,6 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Excel バイナリを FormStructure に格納
     formStructure.excelBase64 = excelBase64;
+    formStructure.embeddedExcelFileName = file.name;
 
     // iReporter セルコメントの連携用カタログ（シート名・アドレス・パース結果）
     formStructure.cellCommentCatalog = buildCellCommentCatalog(formStructure);

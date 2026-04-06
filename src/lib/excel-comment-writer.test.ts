@@ -6,6 +6,7 @@ import { extractCellCommentRaw } from "./excel-parser";
 import { injectCommentsIntoXlsxBuffer, MAX_ZIP_COMMENT_CELLS } from "./excel-comment-zip";
 import { mergeCellCommentsIntoExcelBase64 } from "./excel-comment-writer";
 import { parseIReporterCellComment } from "./cell-comment-parse";
+import { hasExcelOutputSettingSheet } from "./excel-cleaner";
 import type { CellCommentCatalog } from "./form-structure";
 
 /** テスト用の空 xlsx（ここだけ SheetJS write — 本番の definitionFile 経路では使わない） */
@@ -114,5 +115,52 @@ describe("mergeCellCommentsIntoExcelBase64", () => {
     const wb2 = XLSX.read(Buffer.from(outB64, "base64"), { type: "buffer" });
     const raw = extractCellCommentRaw(wb2.Sheets["Sheet1"]!["A1"] as XLSX.CellObject);
     assert.equal(raw, expectedStored);
+  });
+
+  it("fileName が .xml でも xlsx 実体なら設定シートを保持してマージする", async () => {
+    const wb = XLSX.utils.book_new();
+    const wsSetting = XLSX.utils.aoa_to_sheet([["setting"]]);
+    const wsMain = XLSX.utils.aoa_to_sheet([["main"]]);
+    // 先頭に設定シートがあるケース（今回の不具合再現パターン）
+    XLSX.utils.book_append_sheet(wb, wsSetting, "ExcelOutputSetting");
+    XLSX.utils.book_append_sheet(wb, wsMain, "Sheet1");
+    const src = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const b64 = src.toString("base64");
+
+    const text = "項目\nKeyboardText\n0\n0\n0\n";
+    const expectedStored = normalizeCommentRawForWrite(text);
+    const catalog: CellCommentCatalog = {
+      lastGeneratedAt: "",
+      entries: [
+        {
+          sheetName: "名前ミスマッチ",
+          sheetIndex: 0,
+          cell: "A1",
+          row: 0,
+          col: 0,
+          commentRaw: text,
+          parsed: parseIReporterCellComment(text),
+        },
+      ],
+    };
+
+    const outB64 = await mergeCellCommentsIntoExcelBase64(b64, "imported.xml", catalog);
+    const outWb = XLSX.read(Buffer.from(outB64, "base64"), { type: "buffer" });
+    assert.ok(outWb.SheetNames.includes("ExcelOutputSetting"));
+    const raw = extractCellCommentRaw(outWb.Sheets["Sheet1"]!["A1"] as XLSX.CellObject);
+    assert.equal(raw, expectedStored);
+  });
+
+  it("設定シート検知: ExcelOutputSetting あり/なしを正しく判定", async () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["x"]]), "ExcelOutputSetting");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["y"]]), "Sheet1");
+    const withSetting = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    assert.equal(await hasExcelOutputSettingSheet(withSetting), true);
+
+    const wb2 = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb2, XLSX.utils.aoa_to_sheet([["z"]]), "Sheet1");
+    const withoutSetting = XLSX.write(wb2, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    assert.equal(await hasExcelOutputSettingSheet(withoutSetting), false);
   });
 });

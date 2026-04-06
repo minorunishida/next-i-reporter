@@ -155,6 +155,7 @@ export function parseConmasXml(xml: string, fileName?: string): AnalysisResult {
     sheets,
     pdfBase64,
     excelBase64,
+    embeddedExcelFileName: excelFileName || undefined,
   };
 
   const highConfidence = allClusters.filter((c) => c.confidence >= 0.9).length;

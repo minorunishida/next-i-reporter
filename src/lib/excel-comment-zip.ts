@@ -4,6 +4,7 @@
  * @see excel-cleaner.ts（同様の ZIP 直接操作）
  */
 import JSZip from "jszip";
+import { SETTING_SHEET_NAMES_LOWER } from "./excel-cleaner";
 import { normalizeCommentRawForWrite } from "./cell-comment-build";
 import { buildVmlDrawingXml } from "./excel-comment-vml";
 
@@ -227,8 +228,13 @@ function insertLegacyDrawingIfMissing(
 
 type WorkbookSheetIndex = {
   nameToPath: Map<string, string>;
-  /** workbook.xml の <sheet> 出現順（0-based インデックス = ここでの順序） */
+  /** workbook.xml の <sheet> 出現順（全シート） */
   orderedPaths: string[];
+  /**
+   * ExcelOutputSetting 等を除いたシートのパス順。FormStructure の sheetIndex と一致させる。
+   * （全シート順でのインデックスは設定シートでズレるため、sheetIndex フォールバックには使わない）
+   */
+  dataSheetOrderedPaths: string[];
 };
 
 function buildWorkbookSheetIndex(
@@ -255,14 +261,21 @@ function buildWorkbookSheetIndex(
       orderedPaths.push(target);
     }
   }
-  return { nameToPath, orderedPaths };
+  const pathToName = new Map<string, string>();
+  for (const [n, p] of nameToPath) pathToName.set(p, n);
+  const dataSheetOrderedPaths = orderedPaths.filter((p) => {
+    const n = pathToName.get(p);
+    if (n == null) return false;
+    return !SETTING_SHEET_NAMES_LOWER.includes(n.toLowerCase());
+  });
+  return { nameToPath, orderedPaths, dataSheetOrderedPaths };
 }
 
 function resolveSheetPath(
   sheetName: string,
   sheetIndex: number | undefined,
   nameToPath: Map<string, string>,
-  orderedPaths: string[],
+  dataSheetOrderedPaths: string[],
 ): string | undefined {
   const tryName = (n: string): string | undefined => nameToPath.get(n);
   const direct = tryName(sheetName);
@@ -282,9 +295,9 @@ function resolveSheetPath(
     sheetIndex !== undefined &&
     Number.isFinite(sheetIndex) &&
     sheetIndex >= 0 &&
-    sheetIndex < orderedPaths.length
+    sheetIndex < dataSheetOrderedPaths.length
   ) {
-    return orderedPaths[Math.floor(sheetIndex)];
+    return dataSheetOrderedPaths[Math.floor(sheetIndex)];
   }
   return undefined;
 }
@@ -308,10 +321,8 @@ export async function injectCommentsIntoXlsxBuffer(
   const wbRels = await zip.file("xl/_rels/workbook.xml.rels")?.async("string");
   if (!wbXml || !wbRels) return buffer;
 
-  const { nameToPath: sheetNameToPath, orderedPaths } = buildWorkbookSheetIndex(
-    wbXml,
-    wbRels,
-  );
+  const { nameToPath: sheetNameToPath, dataSheetOrderedPaths } =
+    buildWorkbookSheetIndex(wbXml, wbRels);
 
   const bySheetPath = new Map<string, ZipCommentUpdate[]>();
   for (const u of updates) {
@@ -319,7 +330,7 @@ export async function injectCommentsIntoXlsxBuffer(
       u.sheetName,
       u.sheetIndex,
       sheetNameToPath,
-      orderedPaths,
+      dataSheetOrderedPaths,
     );
     if (!p) continue;
     const normAddr = normalizeRef(u.address);

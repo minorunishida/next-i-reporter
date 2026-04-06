@@ -8,6 +8,11 @@ export type CellCommentUpdate = ZipCommentUpdate;
 
 export const MAX_COMMENT_CELLS = 1000;
 
+/** OOXML .xlsx は ZIP（先頭 PK）。fileName が .xml でも実体が xlsx なら true。 */
+export function isXlsxZipBuffer(buf: Buffer): boolean {
+  return buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b;
+}
+
 /**
  * カタログが空でも、埋め込み xlsx を再パースしてコメント付きセルを検出する（XML インポート等でカタログ欠落した場合の救済）。
  * パースには SheetJS read のみ使用（バイナリは書き換えない）。
@@ -19,10 +24,9 @@ function resolveCatalogForMerge(
 ): CellCommentCatalog | undefined {
   if (catalog?.entries?.length) return catalog;
   if (!excelBase64) return undefined;
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-  if (ext !== "xlsx") return undefined;
+  const buf = Buffer.from(excelBase64, "base64");
+  if (!isXlsxZipBuffer(buf)) return undefined;
   try {
-    const buf = Buffer.from(excelBase64, "base64");
     const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     const parsed = parseExcel(ab, fileName);
     const built = buildCellCommentCatalog(parsed);
@@ -43,8 +47,8 @@ export async function mergeCellCommentsIntoExcelBase64(
 ): Promise<string> {
   const effective = resolveCatalogForMerge(excelBase64, fileName, catalog);
   if (!excelBase64 || !effective?.entries?.length) return excelBase64;
-  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-  if (ext !== "xlsx") return excelBase64;
+  const buf0 = Buffer.from(excelBase64, "base64");
+  if (!isXlsxZipBuffer(buf0)) return excelBase64;
 
   const updates: CellCommentUpdate[] = effective.entries
     .slice(0, MAX_COMMENT_CELLS)
@@ -55,7 +59,6 @@ export async function mergeCellCommentsIntoExcelBase64(
       text: e.commentRaw,
     }));
 
-  const buf = Buffer.from(excelBase64, "base64");
-  const out = await injectCommentsIntoXlsxBuffer(buf, updates);
+  const out = await injectCommentsIntoXlsxBuffer(buf0, updates);
   return out.toString("base64");
 }

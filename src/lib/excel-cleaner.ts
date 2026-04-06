@@ -11,7 +11,8 @@
 
 import JSZip from "jszip";
 
-const SETTING_SHEET_NAMES = [
+/** i-Reporter 系の設定シート名（小文字比較）— ZIP コメント注入のシートインデックス解決でも使用 */
+export const SETTING_SHEET_NAMES_LOWER: readonly string[] = [
   "exceloutputsetting",
   "xcaptriireportersetting",
   "conmasireportersetting",
@@ -41,7 +42,7 @@ export async function removeExcelOutputSetting(buffer: Buffer): Promise<string> 
   while ((match = sheetRegex.exec(wbXml)) !== null) {
     const name = match[1];
     const rId = match[2];
-    if (SETTING_SHEET_NAMES.includes(name.toLowerCase())) {
+    if (SETTING_SHEET_NAMES_LOWER.includes(name.toLowerCase())) {
       targetRId = rId;
       targetName = name;
     } else {
@@ -107,6 +108,27 @@ export async function removeExcelOutputSetting(buffer: Buffer): Promise<string> 
     compressionOptions: { level: 9 },
   });
   return cleaned.toString("base64");
+}
+
+/**
+ * xlsx の workbook.xml に設定シートが含まれるか判定する。
+ * （チェック OFF 時の消失検知ガード用）
+ */
+export async function hasExcelOutputSettingSheet(buffer: Buffer): Promise<boolean> {
+  try {
+    const zip = await JSZip.loadAsync(buffer);
+    const wbXml = await zip.file("xl/workbook.xml")?.async("string");
+    if (!wbXml) return false;
+    const sheetRegex = /<sheet\s+[^>]*name="([^"]*)"[^>]*\/>/gi;
+    let match: RegExpExecArray | null;
+    while ((match = sheetRegex.exec(wbXml)) !== null) {
+      const name = match[1]?.toLowerCase?.() ?? "";
+      if (SETTING_SHEET_NAMES_LOWER.includes(name)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function escapeRegex(s: string): string {

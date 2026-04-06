@@ -14,6 +14,7 @@ next-i-reporter のバックエンド API 一覧と仕様です。
 | `/api/ai-analyze` | POST | FormStructure を AI で解析してクラスターを検出 |
 | `/api/ai-analyze-region` | POST | 特定領域を AI で解析（手動クラスター作成用） |
 | `/api/generate-xml` | POST | AnalysisResult から ConMas XML を生成 |
+| `/api/generate-excel-definition` | POST | マージ済み Excel 定義＋ExcelOutputSetting シート（設定 XML を A1）を返す |
 | `/api/import-xml` | POST | ConMas XML をパースして AnalysisResult に変換 |
 
 ---
@@ -24,11 +25,13 @@ Excel ファイルをパースし、セル構造情報を抽出します。
 
 ### リクエスト
 
+`multipart/form-data` で `file`（`.xlsx` / `.xls`）を送ります。`excelBase64` はブックをそのまま保持します。
+
 ```
 POST /api/parse-excel
-Content-Type: application/octet-stream
+Content-Type: multipart/form-data
 
-[Binary: Excel file content]
+file: (binary)
 ```
 
 **Query Parameters:**
@@ -360,6 +363,42 @@ Content-Disposition: attachment; filename="template.xml"
 |--------|------|
 | 400 | クラスター定義が無効 |
 | 500 | XML 生成エラー |
+
+---
+
+## /api/generate-excel-definition
+
+`formStructure.excelBase64` を起点に、ConMas XML の `<definitionFile>` と同一の手順（クラスタ連携コメントのマージ）で加工した Excel ファイルを返します。加えて、**ExcelOutputSetting** シートを自動生成し、Web 上で生成した ConMas `<top>` と同一構造の **テキストのみの XML**（Base64 は含めず、`definitionFile` の type/name と空の `value`、`backgroundImage` / `thumbnail` は空要素）を **セル A1** に書き込みます。`<sheets>` 以下のシート・クラスターは `/api/generate-xml` と同じロジックで出力します。Designer の EXCEL定義出力と同様、再取込時の帳票設定・クラスタ情報の復元に利用できます。
+
+### リクエスト
+
+```
+POST /api/generate-excel-definition
+Content-Type: application/json
+
+{
+  "formStructure": { "fileName": "book.xlsx", "excelBase64": "...", "sheets": [ ... ] },
+  "clusters": [ ... ],
+  "summary": { ... }
+}
+```
+
+`/api/generate-xml` と同じ **`AnalysisResult` のみ**です（追加パラメータはありません）。
+
+### レスポンス
+
+成功時は **バイナリ**（`.xlsx` / `.xls` に応じた `Content-Type`）と `Content-Disposition: attachment; filename*=UTF-8''...` です。ファイル名は `formStructure.fileName` に従います。
+
+### エラーレスポンス（JSON）
+
+| コード | 条件 |
+|--------|------|
+| 400 | 解析結果が不正、`excelBase64` が空（Excel 未アップロード・定義なし XML など） |
+| 500 | 生成処理の失敗 |
+
+```json
+{ "error": "Excel 定義がありません。Excel からアップロードした帳票、または定義ファイル付きの XML をご利用ください。" }
+```
 
 ---
 

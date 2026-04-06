@@ -140,6 +140,12 @@ export type FormStructure = {
   sheets: SheetStructure[];
   pdfBase64?: string;     // 背景PDF (Base64) — プレビュー・座標表示用
   excelBase64?: string;   // Excel定義ファイル (Base64) — 計算式・出力マッピング用
+  /**
+   * 定義バイナリの論理ファイル名（例: book.xlsx）。
+   * ConMas XML の definitionFile の name、または Excel アップロード時の元名。
+   * fileName が .xml のままのときも、実体が xlsx ならここで拡張子を補う。
+   */
+  embeddedExcelFileName?: string;
   /** コメント付きセルのみ集約した連携用カタログ（parse-excel 等で付与） */
   cellCommentCatalog?: CellCommentCatalog;
 };

@@ -1,7 +1,7 @@
 import type { AnalysisResult, ClusterDefinition, SheetStructure } from "./form-structure";
-import { buildMergedCommentCatalog } from "./cell-comment-build";
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
-import { mergeCellCommentsIntoExcelBase64 } from "./excel-comment-writer";
+import { buildMergedDefinitionExcelBase64 } from "./excel-definition-export";
+import { isXlsxZipBuffer } from "./excel-comment-writer";
 import { mapClusterRegionToPdf } from "./print-coord-mapper";
 
 /**
@@ -62,37 +62,13 @@ export function generateBlankPdfBase64(pageCount: number): string {
   return btoa(binary);
 }
 
-/**
- * AnalysisResult から ConMas 互換の XML 文字列を生成する
- *
- * ゴールデンデータ ([V3.1_Sample]全インプットサンプル.xml) の要素順序・構造に完全準拠。
- * Designer の int.Parse / float.Parse / null アクセスに対して安全な値を設定。
- */
-export async function generateConmasXml(result: AnalysisResult): Promise<string> {
-  const { formStructure, clusters } = result;
-  const commentCatalog = buildMergedCommentCatalog(formStructure, clusters);
-  const fileName = formStructure.fileName.replace(/\.[^.]+$/, "");
-  const now = new Date();
-  const timestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
-
-  const L: string[] = [];
-  const p = (line: string) => L.push(line);
-
-  p('<?xml version="1.0" encoding="utf-8"?>');
-  p("<conmas>");
-
-  // === header (ゴールデン準拠) ===
-  p("  <header>");
-  p("    <version></version>");
-  p("    <command></command>");
-  p("    <resultCode></resultCode>");
-  p("    <message></message>");
-  p("    <requestUser></requestUser>");
-  p("    <createTime></createTime>");
-  p("  </header>");
-
-  // === top (ゴールデン準拠 — 全要素を順序通りに出力) ===
-  p("  <top>");
+/** `<top>` 内の defTopId 〜 saveIndividuallyImage（definitionFile 直前まで） */
+function appendConmasTopInnerBeforeEmbeds(
+  p: (line: string) => void,
+  result: AnalysisResult,
+  fileName: string,
+): void {
+  const { formStructure } = result;
   p("    <defTopId>0</defTopId>");
   p(`    <defTopName>${esc(fileName)}</defTopName>`);
   p("    <repTopId></repTopId>");
@@ -155,29 +131,18 @@ export async function generateConmasXml(result: AnalysisResult): Promise<string>
   p("    <isOriginalWhole>1</isOriginalWhole>");
   p("    <wholeImageSize></wholeImageSize>");
   p("    <saveIndividuallyImage>1</saveIndividuallyImage>");
-  // 定義ファイル: Excel バイナリを Base64 で埋め込む (仕様: spec-excel-binary-in-conmas-xml.md)
-  // cell-comment-spec: 16行LF・クラスタからの欠落セルへのコメント合成は buildMergedCommentCatalog
-  const excelBase64 = await mergeCellCommentsIntoExcelBase64(
-    formStructure.excelBase64 ?? "",
-    formStructure.fileName,
-    commentCatalog,
-  );
-  const excelExt = excelBase64
-    ? (formStructure.fileName.split(".").pop()?.toLowerCase() ?? "xlsx")
-    : "";
-  const excelName = excelBase64 ? formStructure.fileName : "";
-  p("    <definitionFile>");
-  p(`      <type>${excelExt}</type>`);
-  p(`      <name>${esc(excelName)}</name>`);
-  p(`      <value>${excelBase64}</value>`);
-  p("    </definitionFile>");
-  // 背景PDF: Graph API で変換した実PDFがあればそれを使用、なければブランクPDF
-  const pdfBase64 = formStructure.pdfBase64 || generateBlankPdfBase64(formStructure.sheets.length);
-  p(`    <backgroundImage>${pdfBase64}</backgroundImage>`);
-  p("    <thumbnail></thumbnail>");
+}
+
+/** editMail 〜 `<sheets>` 内のシート・クラスター（generateConmasXml と同一） */
+function appendConmasTopInnerAfterEmbeds(
+  L: string[],
+  result: AnalysisResult,
+  timestamp: string,
+): void {
+  const p = (line: string) => L.push(line);
+  const { formStructure, clusters } = result;
   p("    <editMail></editMail>");
   p("    <completeMail></completeMail>");
-  // remarks (ゴールデンでは「帳票備考」)
   for (let i = 1; i <= 10; i++) {
     p(`    <remarksName${i}>帳票備考${toFW(i)}</remarksName${i}>`);
   }
@@ -313,13 +278,117 @@ export async function generateConmasXml(result: AnalysisResult): Promise<string>
   p("      <edgeOcrClusters></edgeOcrClusters>");
   p("    </edgeOcrSetting>");
   p("    <pageClusters></pageClusters>");
-  // === sheets + clusters は top > sheets の中に入る (variables ではない) ===
   p("    <sheets>");
   for (const sheet of formStructure.sheets) {
     const sc = clusters.filter((c) => c.sheetNo === sheet.index && c.type !== 20);
     L.push(...genSheet(sheet, sc));
   }
   p("    </sheets>");
+}
+
+function definitionFileMetaForTop(formStructure: AnalysisResult["formStructure"]): {
+  excelExt: string;
+  excelName: string;
+} {
+  const preferredDefName =
+    formStructure.embeddedExcelFileName?.trim() || formStructure.fileName;
+  let excelExt = preferredDefName.split(".").pop()?.toLowerCase() ?? "";
+  if (excelExt === "xml" || excelExt === "") {
+    excelExt = "xlsx";
+  }
+  let excelName = preferredDefName;
+  if (/\.xml$/i.test(excelName) && excelExt === "xlsx") {
+    excelName = excelName.replace(/\.xml$/i, ".xlsx");
+  }
+  return { excelExt, excelName };
+}
+
+/**
+ * ExcelOutputSetting の A1 用: `generateConmasXml` の `<top>` と同一構造だが、
+ * Base64（definitionFile.value / backgroundImage）を含めず、`<sheets>` 以下は Web 上の解析結果どおり出力する。
+ */
+export function buildExcelOutputSettingXml(result: AnalysisResult): string {
+  const fileName = result.formStructure.fileName.replace(/\.[^.]+$/, "");
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
+  const L: string[] = [];
+  const p = (line: string) => L.push(line);
+  const { excelExt, excelName } = definitionFileMetaForTop(result.formStructure);
+
+  p('<?xml version="1.0" encoding="utf-8"?>');
+  p("  <top>");
+  appendConmasTopInnerBeforeEmbeds(p, result, fileName);
+  p("    <definitionFile>");
+  p(`      <type>${excelExt}</type>`);
+  p(`      <name>${esc(excelName)}</name>`);
+  p("      <value></value>");
+  p("    </definitionFile>");
+  p("    <backgroundImage></backgroundImage>");
+  p("    <thumbnail></thumbnail>");
+  appendConmasTopInnerAfterEmbeds(L, result, timestamp);
+  p("  </top>");
+  return L.join("\n");
+}
+
+/**
+ * AnalysisResult から ConMas 互換の XML 文字列を生成する
+ *
+ * ゴールデンデータ ([V3.1_Sample]全インプットサンプル.xml) の要素順序・構造に完全準拠。
+ * Designer の int.Parse / float.Parse / null アクセスに対して安全な値を設定。
+ */
+export async function generateConmasXml(result: AnalysisResult): Promise<string> {
+  const { formStructure, clusters } = result;
+  const fileName = formStructure.fileName.replace(/\.[^.]+$/, "");
+  const now = new Date();
+  const timestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+
+  const L: string[] = [];
+  const p = (line: string) => L.push(line);
+
+  p('<?xml version="1.0" encoding="utf-8"?>');
+  p("<conmas>");
+
+  // === header (ゴールデン準拠) ===
+  p("  <header>");
+  p("    <version></version>");
+  p("    <command></command>");
+  p("    <resultCode></resultCode>");
+  p("    <message></message>");
+  p("    <requestUser></requestUser>");
+  p("    <createTime></createTime>");
+  p("  </header>");
+
+  // === top (ゴールデン準拠 — 全要素を順序通りに出力) ===
+  p("  <top>");
+  appendConmasTopInnerBeforeEmbeds(p, result, fileName);
+  // 定義ファイル: Excel バイナリを Base64 で埋め込む (仕様: spec-excel-binary-in-conmas-xml.md)
+  const excelBase64 = await buildMergedDefinitionExcelBase64(result);
+  const preferredDefName =
+    formStructure.embeddedExcelFileName?.trim() || formStructure.fileName;
+  let excelExt = "";
+  let excelName = "";
+  if (excelBase64) {
+    excelExt = preferredDefName.split(".").pop()?.toLowerCase() ?? "";
+    const defBuf = Buffer.from(excelBase64, "base64");
+    if (isXlsxZipBuffer(defBuf) && (excelExt === "xml" || excelExt === "")) {
+      excelExt = "xlsx";
+    }
+    excelName = preferredDefName;
+    if (/\.xml$/i.test(excelName) && excelExt === "xlsx") {
+      excelName = excelName.replace(/\.xml$/i, ".xlsx");
+    }
+  }
+  p("    <definitionFile>");
+  p(`      <type>${excelExt}</type>`);
+  p(`      <name>${esc(excelName)}</name>`);
+  p(`      <value>${excelBase64}</value>`);
+  p("    </definitionFile>");
+  // 背景PDF: Graph API で変換した実PDFがあればそれを使用、なければブランクPDF
+  const pdfBase64 = formStructure.pdfBase64 || generateBlankPdfBase64(formStructure.sheets.length);
+  p(`    <backgroundImage>${pdfBase64}</backgroundImage>`);
+  p("    <thumbnail></thumbnail>");
+  appendConmasTopInnerAfterEmbeds(L, result, timestamp);
   p("  </top>");
   p("</conmas>");
 
