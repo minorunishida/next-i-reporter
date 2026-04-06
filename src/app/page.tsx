@@ -21,6 +21,7 @@ import ExcelUploader from "@/components/ExcelUploader";
 import FormPreview from "@/components/FormPreview";
 import ClusterEditor from "@/components/ClusterEditor";
 import type { FormStructure, AnalysisResult, ClusterDefinition } from "@/lib/form-structure";
+import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 
 type Step = "upload" | "preview" | "analyzing" | "result";
 
@@ -56,11 +57,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formForAi),
       });
+      const text = await res.text();
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "AI 解析に失敗しました");
+        throw new Error(messageFromFailedResponse(text, res.status));
       }
-      const result: AnalysisResult = await res.json();
+      const result = parseJsonResponse<AnalysisResult>(text);
       // pdfBase64 を復元 (XML 生成時に必要)
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
@@ -112,11 +113,11 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formForAi),
       });
+      const text = await res.text();
       if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error ?? "AI 解析に失敗しました");
+        throw new Error(messageFromFailedResponse(text, res.status));
       }
-      const result: AnalysisResult = await res.json();
+      const result = parseJsonResponse<AnalysisResult>(text);
       result.formStructure.pdfBase64 = formStructure.pdfBase64;
       result.formStructure.excelBase64 = formStructure.excelBase64;
       result.formStructure.embeddedExcelFileName = formStructure.embeddedExcelFileName;
@@ -338,8 +339,9 @@ export default function Home() {
                       body: JSON.stringify(analysisResult),
                     });
                     if (!res.ok) {
-                      const body = await res.json();
-                      throw new Error(body.error ?? "Excel 定義の生成に失敗しました");
+                      throw new Error(
+                        messageFromFailedResponse(await res.text(), res.status),
+                      );
                     }
                     const blob = await res.blob();
                     const url = URL.createObjectURL(blob);
@@ -378,8 +380,9 @@ export default function Home() {
                       body: JSON.stringify(analysisResult),
                     });
                     if (!res.ok) {
-                      const body = await res.json();
-                      throw new Error(body.error ?? "XML 生成に失敗しました");
+                      throw new Error(
+                        messageFromFailedResponse(await res.text(), res.status),
+                      );
                     }
                     const blob = await res.blob();
                     const url = URL.createObjectURL(blob);

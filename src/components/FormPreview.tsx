@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { FormStructure, CellInfo, SheetStructure } from "@/lib/form-structure";
+import { loadPdfJs } from "@/lib/load-pdfjs";
 
 // --- 用紙サイズ定義 (mm) ---
 
@@ -269,8 +270,7 @@ function PdfPagePreview({ pdfBase64, pageIndex, wPx, hPx }: { pdfBase64: string;
     }
 
     (async () => {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const pdfjsLib = await loadPdfJs();
 
       const data = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
       const pdf = await pdfjsLib.getDocument({ data }).promise;

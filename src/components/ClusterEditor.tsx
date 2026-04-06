@@ -19,6 +19,8 @@ import {
   type ClusterTypeEntry,
 } from "@/lib/cluster-type-registry";
 import { mapClusterRegionToPdf, computePrintAreaPx, computePdfContentArea } from "@/lib/print-coord-mapper";
+import { loadPdfJs } from "@/lib/load-pdfjs";
+import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response";
 import ClusterToolbar from "./ClusterToolbar";
 import CreateClusterPopover from "./CreateClusterPopover";
 import ParameterEditor from "./ParameterEditor";
@@ -308,8 +310,11 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sheet, regionCells, contextCells, drawnRegion: region }),
     });
-    if (!res.ok) throw new Error((await res.json()).error ?? "AI推論に失敗しました");
-    return await res.json() as RegionAnalysisResult;
+    const text = await res.text();
+    if (!res.ok) {
+      throw new Error(messageFromFailedResponse(text, res.status));
+    }
+    return parseJsonResponse<RegionAnalysisResult>(text);
   }, [pendingCreate, sheet]);
 
   const handleConfirmCreate = useCallback(
@@ -997,8 +1002,7 @@ function VisualPreview({
     }
 
     (async () => {
-      const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+      const pdfjsLib = await loadPdfJs();
 
       const data = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
       const pdf = await pdfjsLib.getDocument({ data }).promise;

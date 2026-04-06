@@ -3,11 +3,16 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
+  "main": "electron/main.mjs",
   "scripts": {
     "cli": "node --experimental-strip-types src/cli/index.ts",
     "dev": "next dev",
+    "postinstall": "node scripts/sync-pdf-worker.mjs",
     "build": "next build",
     "start": "next start",
+    "electron:dev": "concurrently -k \"next dev --webpack\" \"wait-on http://127.0.0.1:3000 --timeout 120000 && electron .\"",
+    "electron:prepare": "node scripts/prepare-electron-standalone.mjs",
+    "electron:build": "next build && node scripts/prepare-electron-standalone.mjs && electron-builder",
     "lint": "eslint",
     "test": "node --experimental-strip-types --loader ./test-loader.mjs --test src/lib/**/*.test.ts",
     "test:cli": "node --experimental-strip-types --loader ./test-loader.mjs --test src/lib/template-inspector.test.ts src/lib/xml-validator.test.ts src/lib/template-diff.test.ts",
@@ -19,6 +24,8 @@
     "@azure/identity": "^4.13.1",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "canvas-confetti": "^1.9.4",
+    "dotenv": "^17.4.1",
+    "get-port": "^7.2.0",
     "isomorphic-fetch": "^3.0.0",
     "jszip": "^3.10.1",
     "next": "16.2.1",
@@ -34,12 +41,47 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "patch-package": "^8.0.1",
     "playwright": "^1.58.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitepress": "^1.6.4"
+    "vitepress": "^1.6.4",
+    "wait-on": "^8.0.5"
+  },
+  "build": {
+    "appId": "jp.next-i-reporter.app",
+    "productName": "next-i-reporter",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "**/*",
+      "!.next",
+      "!dist-electron",
+      "!docs",
+      "!src",
+      "!*.md",
+      "!playwright.config.*"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "standalone",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "signAndEditExecutable": false
+    }
   }
 }
