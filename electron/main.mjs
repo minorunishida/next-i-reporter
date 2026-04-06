@@ -1,10 +1,131 @@
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import getPort from "get-port";
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage } from "electron";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ---- 設定ストレージ ----
+
+function settingsFilePath() {
+  return path.join(app.getPath("userData"), "settings.json");
+}
+
+function secretsFilePath() {
+  return path.join(app.getPath("userData"), "secrets.enc");
+}
+
+function readSettings() {
+  try {
+    return JSON.parse(readFileSync(settingsFilePath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeSettings(data) {
+  const p = settingsFilePath();
+  mkdirSync(path.dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify(data), "utf8");
+}
+
+function readSecrets() {
+  try {
+    return JSON.parse(readFileSync(secretsFilePath(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeSecrets(data) {
+  const p = secretsFilePath();
+  mkdirSync(path.dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify(data), "utf8");
+}
+
+/** safeStorage (Windows: DPAPI) で暗号化して保存 */
+function setEncryptedValue(key, value) {
+  if (!safeStorage.isEncryptionAvailable()) return false;
+  const secrets = readSecrets();
+  secrets[key] = safeStorage.encryptString(value).toString("base64");
+  writeSecrets(secrets);
+  return true;
+}
+
+/** safeStorage で復号して取得。失敗時は null */
+function getEncryptedValue(key) {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  const secrets = readSecrets();
+  if (!secrets[key]) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(secrets[key], "base64"));
+  } catch {
+    return null;
+  }
+}
+
+function deleteEncryptedValue(key) {
+  const secrets = readSecrets();
+  delete secrets[key];
+  writeSecrets(secrets);
+}
+
+// ---- IPC ハンドラー ----
+
+function setupIpcHandlers() {
+  ipcMain.handle("settings:get", () => {
+    const settings = readSettings();
+    return {
+      hasApiKey: Boolean(getEncryptedValue("OPENAI_API_KEY")),
+      eprintCliPath: settings.EPRINT_CLI_PATH ?? "",
+    };
+  });
+
+  ipcMain.handle("settings:save", (_, { apiKey, eprintCliPath } = {}) => {
+    if (typeof apiKey === "string") {
+      if (apiKey === "") {
+        deleteEncryptedValue("OPENAI_API_KEY");
+        delete process.env.OPENAI_API_KEY;
+      } else {
+        setEncryptedValue("OPENAI_API_KEY", apiKey);
+        process.env.OPENAI_API_KEY = apiKey;
+      }
+    }
+    if (typeof eprintCliPath === "string") {
+      const s = readSettings();
+      s.EPRINT_CLI_PATH = eprintCliPath;
+      writeSettings(s);
+      process.env.EPRINT_CLI_PATH = eprintCliPath;
+    }
+    logLine("settings:save completed");
+    return { ok: true };
+  });
+
+  ipcMain.handle("dialog:open-file", async (_, options = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ["openFile"],
+      ...options,
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle("settings:restart-server", async () => {
+    if (!app.isPackaged) {
+      // 開発モードは Next.js dev が別プロセスで動いているため再起動不要
+      return { ok: true, dev: true };
+    }
+    cleanupServer();
+    packagedServerPort = await startNextStandalone();
+    mainWindow?.loadURL(`http://127.0.0.1:${packagedServerPort}`);
+    return { ok: true };
+  });
+}
+
+// ---- .env 読み込み ----
 
 /** 実行ファイルと同じディレクトリの .env（配布時）。開発時はカレントの .env / .env.local */
 function loadEnvFiles() {
@@ -22,6 +143,17 @@ function loadEnvFiles() {
     const root = process.cwd();
     dotenv.config({ path: path.join(root, ".env") });
     dotenv.config({ path: path.join(root, ".env.local"), override: true });
+  }
+
+  // safeStorage の値が最優先（設定画面で保存した値）
+  const storedKey = getEncryptedValue("OPENAI_API_KEY");
+  if (storedKey) {
+    process.env.OPENAI_API_KEY = storedKey;
+    logLine("dotenv: OPENAI_API_KEY loaded from safeStorage");
+  }
+  const storedSettings = readSettings();
+  if (storedSettings.EPRINT_CLI_PATH) {
+    process.env.EPRINT_CLI_PATH = storedSettings.EPRINT_CLI_PATH;
   }
 }
 
@@ -140,12 +272,18 @@ async function startNextStandalone() {
 }
 
 function createWindow(url) {
+  const iconPath = path.join(process.cwd(), "build", "icon.ico");
+  const icon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : undefined;
+  const preload = path.join(__dirname, "preload.cjs");
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 900,
+    autoHideMenuBar: true,
+    icon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload,
     },
   });
   mainWindow.loadURL(url);
@@ -165,6 +303,7 @@ function showFatal(title, err) {
 }
 
 async function ready() {
+  setupIpcHandlers();
   loadEnvFiles();
 
   if (!app.isPackaged) {

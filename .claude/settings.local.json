@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep \"\\\\.ts$\")",
+      "Bash(ls /c/Users/minoru.nishida/Documents/dev/next-i-reporter/src/lib/*.ts)",
+      "Bash(wc -l /c/Users/minoru.nishida/Documents/dev/next-i-reporter/src/lib/*.ts)",
+      "Bash(ls /c/Users/minoru.nishida/Documents/dev/next-i-reporter/*.png /c/Users/minoru.nishida/Documents/dev/next-i-reporter/*.ico /c/Users/minoru.nishida/Documents/dev/next-i-reporter/*.jpg)",
+      "Bash(npm list:*)",
+      "Bash(npx electron-builder:*)",
+      "Bash(node -e ':*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

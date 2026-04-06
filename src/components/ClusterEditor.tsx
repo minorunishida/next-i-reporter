@@ -347,7 +347,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
   }, []);
 
   return (
-    <div className="flex flex-col gap-4 animate-fade-in-up">
+    <div className="flex flex-col gap-3 animate-fade-in-up">
       {/* Toolbar */}
       <ClusterToolbar
         clusters={sheetClusters}
@@ -406,10 +406,10 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
       )}
 
       {/* Split pane */}
-      <div className="flex gap-4 min-h-[500px]">
+      <div className="flex gap-4 min-h-[400px]">
         {/* LEFT: Visual preview */}
         <div className="flex-1 min-w-0 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/60 overflow-hidden flex flex-col">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex items-center gap-2 px-4 py-1.5 border-b border-slate-100 bg-slate-50/60">
             <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
             </svg>
@@ -445,7 +445,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
             </div>
           </div>
           {/* Paper selector */}
-          <div className="flex items-center gap-3 px-4 py-2 border-b border-slate-100 flex-wrap">
+          <div className="flex items-center gap-3 px-4 py-1.5 border-b border-slate-100 flex-wrap">
             <div className="flex items-center gap-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mr-1">用紙</span>
               {(["A4", "A3", "B4"] as const).map((s) => (
@@ -501,7 +501,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
             </span>
           </div>
           <div
-            className="flex-1 overflow-auto bg-slate-100 p-4 flex justify-center"
+            className="flex-1 overflow-auto bg-slate-100 p-2 flex justify-center"
             onClick={handleBackgroundClick}
             onWheel={(e) => {
               if (e.ctrlKey || e.metaKey) {
@@ -547,7 +547,7 @@ export default function ClusterEditor({ analysisResult, formStructure, onCluster
 
         {/* RIGHT: Property panel */}
         <div className="w-80 shrink-0 rounded-2xl bg-white shadow-sm ring-1 ring-slate-200/60 overflow-hidden flex flex-col">
-          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-100 bg-slate-50/60">
+          <div className="flex items-center gap-2 px-4 py-1.5 border-b border-slate-100 bg-slate-50/60">
             <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>

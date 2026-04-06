@@ -1,0 +1,252 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      isElectron: boolean;
+      getSettings: () => Promise<{ hasApiKey: boolean; eprintCliPath: string }>;
+      saveSettings: (s: { apiKey?: string; eprintCliPath?: string }) => Promise<{ ok: boolean }>;
+      restartServer: () => Promise<{ ok: boolean; dev?: boolean }>;
+      openFileDialog: (options?: { filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>;
+    };
+  }
+}
+
+type Status = "idle" | "saving" | "restarting" | "saved" | "error";
+
+export default function SettingsPage() {
+  const [isElectron, setIsElectron] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [eprintCliPath, setEprintCliPath] = useState("");
+  const [status, setStatus] = useState<Status>("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    if (window.electronAPI?.isElectron) {
+      setIsElectron(true);
+      window.electronAPI.getSettings().then((s) => {
+        setHasApiKey(s.hasApiKey);
+        setEprintCliPath(s.eprintCliPath);
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  async function handleBrowse() {
+    const path = await window.electronAPI?.openFileDialog({
+      filters: [{ name: "実行ファイル", extensions: ["exe"] }],
+    });
+    if (path) setEprintCliPath(path);
+  }
+
+  async function handleSave() {
+    if (!window.electronAPI) return;
+    if (!eprintCliPath.trim()) {
+      setErrorMsg("eprint CLI パスを選択してください");
+      setStatus("error");
+      return;
+    }
+    setStatus("saving");
+    setErrorMsg("");
+    try {
+      const payload: { apiKey?: string; eprintCliPath?: string } = {
+        eprintCliPath: eprintCliPath.trim(),
+      };
+      // apiKeyInput が空 → 変更なし（クリアは別ボタン）
+      if (apiKeyInput.trim()) {
+        payload.apiKey = apiKeyInput.trim();
+      }
+      await window.electronAPI.saveSettings(payload);
+
+      setStatus("restarting");
+      const result = await window.electronAPI.restartServer();
+      if (result.dev) {
+        // 開発モード: サーバーは別プロセスのため手動再起動が必要
+        setStatus("saved");
+        setHasApiKey(apiKeyInput.trim() ? true : hasApiKey);
+        setApiKeyInput("");
+      } else {
+        // packaged: サーバー再起動 & ページ遷移済み
+        setStatus("saved");
+        setHasApiKey(apiKeyInput.trim() ? true : hasApiKey);
+        setApiKeyInput("");
+      }
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "保存に失敗しました");
+      setStatus("error");
+    }
+  }
+
+  async function handleClearApiKey() {
+    if (!window.electronAPI) return;
+    if (!confirm("API キーを削除しますか?")) return;
+    setStatus("saving");
+    try {
+      await window.electronAPI.saveSettings({ apiKey: "" });
+      setHasApiKey(false);
+      setApiKeyInput("");
+      setStatus("saved");
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "削除に失敗しました");
+      setStatus("error");
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="flex min-h-[calc(100vh-2.5rem)] items-center justify-center">
+        <span className="text-sm text-slate-400">読み込み中...</span>
+      </main>
+    );
+  }
+
+  if (!isElectron) {
+    return (
+      <main className="flex min-h-[calc(100vh-2.5rem)] items-center justify-center">
+        <div className="text-center text-sm text-slate-500">
+          <p className="font-medium">この設定画面は Electron アプリ内でのみ利用できます。</p>
+          <p className="mt-1 text-slate-400">開発時は <code className="font-mono">.env.local</code> を直接編集してください。</p>
+        </div>
+      </main>
+    );
+  }
+
+  const isBusy = status === "saving" || status === "restarting";
+
+  return (
+    <main className="flex min-h-[calc(100vh-2.5rem)] flex-col items-center px-4 py-8">
+      <div className="w-full max-w-xl">
+        <div className="mb-6 flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            戻る
+          </Link>
+          <h1 className="text-lg font-semibold text-slate-900">設定</h1>
+        </div>
+
+        {/* OpenAI API キー */}
+        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">OpenAI API キー</h2>
+              <p className="mt-0.5 text-xs text-slate-400">
+                OS の暗号化機能 (DPAPI) で保護されます。平文では保存されません。
+              </p>
+            </div>
+            {hasApiKey ? (
+              <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                設定済み
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200">
+                未設定
+              </span>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={hasApiKey ? "新しいキーを入力して上書き" : "sk-proj-..."}
+              autoComplete="off"
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-800 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            />
+            {hasApiKey && (
+              <button
+                onClick={handleClearApiKey}
+                disabled={isBusy}
+                className="shrink-0 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-500 hover:bg-red-50 disabled:opacity-40 transition-colors"
+              >
+                削除
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">
+            入力した値はこのアプリケーションには返りません。OS の保護領域に暗号化されます。
+          </p>
+        </section>
+
+        {/* eprint CLI パス */}
+        <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-center gap-1.5">
+            <h2 className="text-sm font-semibold text-slate-800">eprint CLI パス</h2>
+            <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-500 ring-1 ring-red-200">必須</span>
+          </div>
+          <p className="mb-3 text-xs text-slate-400">
+            Excel → PDF 変換に使用するローカル実行ファイル (.exe) を選択してください。
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={eprintCliPath}
+              readOnly
+              placeholder="ファイルを選択してください..."
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-700 placeholder:text-slate-300 cursor-default"
+            />
+            <button
+              type="button"
+              onClick={handleBrowse}
+              className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              参照...
+            </button>
+          </div>
+        </section>
+
+        {/* 保存ボタン / ステータス */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={isBusy}
+            className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-wait transition-colors"
+          >
+            {status === "saving" ? (
+              <span className="flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                保存中...
+              </span>
+            ) : status === "restarting" ? (
+              <span className="flex items-center gap-2">
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                サーバー再起動中...
+              </span>
+            ) : (
+              "保存して反映"
+            )}
+          </button>
+
+          {status === "saved" && (
+            <span className="flex items-center gap-1.5 text-sm text-emerald-600 animate-fade-in-up">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              保存しました
+            </span>
+          )}
+
+          {status === "error" && (
+            <span className="text-sm text-red-500">{errorMsg}</span>
+          )}
+        </div>
+
+        <p className="mt-4 text-xs text-slate-400">
+          保存後、アプリ内サーバーを自動で再起動して設定を反映します。
+        </p>
+      </div>
+    </main>
+  );
+}

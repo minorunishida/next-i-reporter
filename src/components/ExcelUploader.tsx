@@ -82,7 +82,7 @@ export default function ExcelUploader({ onParsed, onImported }: Props) {
           ${
             dragging
               ? "border-indigo-400 bg-indigo-50/50 ring-2 ring-indigo-100"
-              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+              : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30"
           }
         `}
       >
@@ -93,7 +93,7 @@ export default function ExcelUploader({ onParsed, onImported }: Props) {
           </>
         ) : (
           <>
-            <svg className={`h-6 w-6 transition-colors duration-200 ${dragging ? "text-indigo-500" : "text-slate-400 group-hover:text-slate-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className={`h-6 w-6 transition-colors duration-200 ${dragging ? "text-indigo-500" : "text-slate-400 group-hover:text-indigo-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
             <div className="text-center">

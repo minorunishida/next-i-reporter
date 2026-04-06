@@ -144,10 +144,10 @@ export default function Home() {
   ] as const;
 
   return (
-    <main className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center px-4 py-8 sm:py-12">
+    <main className="flex min-h-[calc(100vh-2.5rem)] flex-col items-center px-4 py-4 sm:py-6">
       <div className="w-full max-w-7xl animate-fade-in-up">
         {/* Step indicator */}
-        <div className="mb-8 flex justify-center">
+        <div className="mb-4 flex justify-center">
           <div className="flex items-center gap-0">
             {steps.map((s, i) => {
               const isActive =
@@ -275,7 +275,7 @@ export default function Home() {
 
         {/* STEP 3: Results */}
         {step === "result" && analysisResult && formStructure && (
-          <section className="flex flex-col gap-6 animate-fade-in-up">
+          <section className="flex flex-col gap-3 animate-fade-in-up">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -310,7 +310,7 @@ export default function Home() {
               onClustersChange={handleClustersChange}
             />
 
-            <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="sticky bottom-0 z-40 -mx-4 mt-1 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200/80 bg-white/80 px-4 py-2.5 backdrop-blur-sm">
               <button
                 onClick={handleReanalyze}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors duration-150"
