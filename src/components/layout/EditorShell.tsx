@@ -27,10 +27,8 @@ type Props = {
   onCarbonCopyChange: (clusters: ClusterDefinition[]) => void;
   /** The center canvas (ClusterEditor) */
   children: ReactNode;
-  /** Header strip (AI解析結果, navigation buttons) */
+  /** Header strip (AI解析結果, navigation buttons, action buttons) */
   headerSlot?: ReactNode;
-  /** Action bar (downloads etc.) */
-  actionBarSlot?: ReactNode;
 };
 
 // ─── Rail icon SVGs ─────────────────────────────────────────────────────────
@@ -72,7 +70,6 @@ function EditorShellInner({
   onCarbonCopyChange,
   children,
   headerSlot,
-  actionBarSlot,
 }: Props) {
   const state = useEditorState();
   const dispatch = useEditorDispatch();
@@ -214,7 +211,7 @@ function EditorShellInner({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-5rem)] animate-fade-in-up">
+    <div className="flex flex-col h-[calc(100vh-2.5rem)] animate-fade-in-up">
       {/* Header strip */}
       {headerSlot && (
         <div className="shrink-0 px-4 py-1.5 border-b border-slate-200/80 bg-white">
@@ -247,13 +244,6 @@ function EditorShellInner({
         {/* Center canvas */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-auto">{children}</div>
-
-          {/* Action bar */}
-          {actionBarSlot && (
-            <div className="shrink-0 flex items-center justify-end gap-3 border-t border-slate-200/80 bg-white/90 px-4 py-2 backdrop-blur-sm">
-              {actionBarSlot}
-            </div>
-          )}
         </div>
 
         {/* Right panel */}

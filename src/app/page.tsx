@@ -177,56 +177,58 @@ export default function Home() {
   return (
     <main className={`flex min-h-[calc(100vh-2.5rem)] flex-col ${step === "result" ? "" : "items-center px-4 py-4 sm:py-6"}`}>
       <div className={`w-full animate-fade-in-up ${step === "result" ? "" : "max-w-7xl mx-auto px-4"}`}>
-        {/* Step indicator */}
-        <div className="mb-4 flex justify-center">
-          <div className="flex items-center gap-0">
-            {steps.map((s, i) => {
-              const isActive =
-                s.key === step || (s.key === "preview" && step === "analyzing");
-              const isDone =
-                (s.key === "upload" && step !== "upload") ||
-                (s.key === "preview" && (step === "result" || step === "analyzing"));
+        {/* Step indicator — hidden in result step (saves vertical space) */}
+        {step !== "result" && (
+          <div className="mb-4 flex justify-center">
+            <div className="flex items-center gap-0">
+              {steps.map((s, i) => {
+                const isActive =
+                  s.key === step || (s.key === "preview" && step === "analyzing");
+                const isDone =
+                  (s.key === "upload" && step !== "upload") ||
+                  (s.key === "preview" && step === "analyzing");
 
-              return (
-                <div key={s.key} className="flex items-center">
-                  {i > 0 && (
-                    <div
-                      className={`h-px w-10 sm:w-16 transition-colors duration-300 ${
-                        isDone ? "bg-slate-300" : "bg-slate-200"
-                      }`}
-                    />
-                  )}
-                  <div className="flex items-center gap-1.5 px-1">
-                    {isDone ? (
-                      <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
+                return (
+                  <div key={s.key} className="flex items-center">
+                    {i > 0 && (
+                      <div
+                        className={`h-px w-10 sm:w-16 transition-colors duration-300 ${
+                          isDone ? "bg-slate-300" : "bg-slate-200"
+                        }`}
+                      />
+                    )}
+                    <div className="flex items-center gap-1.5 px-1">
+                      {isDone ? (
+                        <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <span
+                          className={`text-xs font-medium ${
+                            isActive ? "text-slate-500" : "text-slate-300"
+                          }`}
+                        >
+                          {s.icon}
+                        </span>
+                      )}
                       <span
-                        className={`text-xs font-medium ${
-                          isActive ? "text-slate-500" : "text-slate-300"
+                        className={`text-xs font-medium transition-colors duration-300 ${
+                          isActive
+                            ? "text-slate-900 border-b border-slate-900 pb-0.5"
+                            : isDone
+                              ? "text-slate-500"
+                              : "text-slate-400"
                         }`}
                       >
-                        {s.icon}
+                        {s.label}
                       </span>
-                    )}
-                    <span
-                      className={`text-xs font-medium transition-colors duration-300 ${
-                        isActive
-                          ? "text-slate-900 border-b border-slate-900 pb-0.5"
-                          : isDone
-                            ? "text-slate-500"
-                            : "text-slate-400"
-                      }`}
-                    >
-                      {s.label}
-                    </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Error banner */}
         {error && (
@@ -313,8 +315,8 @@ export default function Home() {
             onNetworksChange={handleNetworksChange}
             onCarbonCopyChange={handleCarbonCopyChange}
             headerSlot={
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <svg className="h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -323,115 +325,112 @@ export default function Home() {
                     {analysisResult.summary.totalClusters} クラスター検出
                   </span>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <button
+                    onClick={handleReanalyze}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      AI 再解析
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!analysisResult.formStructure.excelBase64?.trim()}
+                    title={
+                      analysisResult.formStructure.excelBase64?.trim()
+                        ? undefined
+                        : "Excel から取り込んだ帳票、または定義ファイル付き XML のみダウンロードできます"
+                    }
+                    onClick={async () => {
+                      if (!analysisResult) return;
+                      try {
+                        const res = await fetch("/api/generate-excel-definition", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(analysisResult),
+                        });
+                        if (!res.ok) {
+                          throw new Error(messageFromFailedResponse(await res.text(), res.status));
+                        }
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        const baseDl =
+                          analysisResult.formStructure.embeddedExcelFileName?.trim() ||
+                          analysisResult.formStructure.fileName ||
+                          "definition.xlsx";
+                        a.download = /\.xml$/i.test(baseDl)
+                          ? baseDl.replace(/\.xml$/i, ".xlsx")
+                          : baseDl;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "Excel 定義の生成に失敗しました");
+                      }
+                    }}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-[#217346] hover:bg-[#1a5c38] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      Excel 定義
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!analysisResult) return;
+                      try {
+                        const res = await fetch("/api/generate-xml", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(analysisResult),
+                        });
+                        if (!res.ok) {
+                          throw new Error(messageFromFailedResponse(await res.text(), res.status));
+                        }
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        const name = analysisResult.formStructure.fileName.replace(/\.[^.]+$/, "") + "_conmas.xml";
+                        a.download = name;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e) {
+                        setError(e instanceof Error ? e.message : "XML 生成に失敗しました");
+                      }
+                    }}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      帳票定義XMLダウンロード
+                    </span>
+                  </button>
+                  <span className="h-4 w-px bg-slate-200" />
                   <button
                     onClick={() => setStep("preview")}
-                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                   >
                     プレビューに戻る
                   </button>
                   <button
                     onClick={handleReset}
-                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                   >
                     最初から
                   </button>
                 </div>
               </div>
-            }
-            actionBarSlot={
-              <>
-                <button
-                  onClick={handleReanalyze}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 bg-white ring-1 ring-slate-200 hover:bg-slate-50 transition-colors duration-150"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    AI で再解析
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  disabled={!analysisResult.formStructure.excelBase64?.trim()}
-                  title={
-                    analysisResult.formStructure.excelBase64?.trim()
-                      ? undefined
-                      : "Excel から取り込んだ帳票、または定義ファイル付き XML のみダウンロードできます"
-                  }
-                  onClick={async () => {
-                    if (!analysisResult) return;
-                    try {
-                      const res = await fetch("/api/generate-excel-definition", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(analysisResult),
-                      });
-                      if (!res.ok) {
-                        throw new Error(messageFromFailedResponse(await res.text(), res.status));
-                      }
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      const baseDl =
-                        analysisResult.formStructure.embeddedExcelFileName?.trim() ||
-                        analysisResult.formStructure.fileName ||
-                        "definition.xlsx";
-                      a.download = /\.xml$/i.test(baseDl)
-                        ? baseDl.replace(/\.xml$/i, ".xlsx")
-                        : baseDl;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : "Excel 定義の生成に失敗しました");
-                    }
-                  }}
-                  className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-[#217346] hover:bg-[#1a5c38] shadow-sm transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#217346]"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Excel 定義をダウンロード
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!analysisResult) return;
-                    try {
-                      const res = await fetch("/api/generate-xml", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(analysisResult),
-                      });
-                      if (!res.ok) {
-                        throw new Error(messageFromFailedResponse(await res.text(), res.status));
-                      }
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      const name = analysisResult.formStructure.fileName.replace(/\.[^.]+$/, "") + "_conmas.xml";
-                      a.download = name;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : "XML 生成に失敗しました");
-                    }
-                  }}
-                  className="rounded-lg px-5 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 transition-colors duration-150"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    ConMas XML をダウンロード
-                  </span>
-                </button>
-              </>
             }
           >
             <ClusterEditor
