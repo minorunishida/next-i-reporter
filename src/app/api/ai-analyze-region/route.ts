@@ -1,11 +1,14 @@
 import { NextRequest } from "next/server";
 import { analyzeRegion } from "@/lib/ai-analyzer";
+import { loadRuntimeEnv } from "@/lib/ai-config";
 import type { SheetStructure } from "@/lib/form-structure";
 
 export async function POST(request: NextRequest) {
+  loadRuntimeEnv();
+
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(
-      { error: "OPENAI_API_KEY が設定されていません (.env.local を確認)" },
+      { error: "OPENAI_API_KEY が設定されていません（設定画面で設定してください）" },
       { status: 500 }
     );
   }

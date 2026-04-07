@@ -9,6 +9,34 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage } from "e
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ---- runtime-env (electron:dev で Next.js にシークレットを渡す) ----
+
+function runtimeEnvPath() {
+  return path.join(app.getPath("userData"), "runtime-env.json");
+}
+
+function writeRuntimeEnv() {
+  try {
+    const env = {};
+    if (process.env.OPENAI_API_KEY) env.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (process.env.EPRINT_CLI_PATH) env.EPRINT_CLI_PATH = process.env.EPRINT_CLI_PATH;
+    writeFileSync(runtimeEnvPath(), JSON.stringify(env), "utf8");
+  } catch {
+    // ログ不可でも続行
+  }
+}
+
+function cleanupRuntimeEnv() {
+  try {
+    const p = runtimeEnvPath();
+    if (existsSync(p)) {
+      writeFileSync(p, "{}", "utf8");
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // ---- バンドル eprint パス解決 ----
 
 function resolveBundledEprintPath() {
@@ -118,6 +146,8 @@ function setupIpcHandlers() {
       writeSettings(s);
       process.env.EPRINT_CLI_PATH = eprintCliPath;
     }
+    // runtime-env を更新（electron:dev で Next.js に反映）
+    writeRuntimeEnv();
     // AI 設定（settings.json に保存、サーバー再起動不要）
     const aiKeys = ["AI_MODEL", "AI_BASE_URL", "AI_SYSTEM_PROMPT", "AI_REGION_SYSTEM_PROMPT"];
     const s = readSettings();
@@ -197,6 +227,10 @@ function loadEnvFiles() {
 
   // Next.js サーバーが settings.json を読むためのパス
   process.env.USER_DATA_PATH = app.getPath("userData");
+
+  // electron:dev 対応: Next.js dev サーバー (別プロセス) が読めるように
+  // API キーを runtime-env.json に書き出す
+  writeRuntimeEnv();
 }
 
 function logPath() {
@@ -380,6 +414,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   cleanupServer();
+  cleanupRuntimeEnv();
 });
 
 app.on("activate", () => {

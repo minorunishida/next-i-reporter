@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { analyzeForm } from "@/lib/ai-analyzer";
+import { loadRuntimeEnv } from "@/lib/ai-config";
 import { mapClusterRegionToPdf } from "@/lib/print-coord-mapper";
 import { createLogger } from "@/lib/logger";
 import type { FormStructure } from "@/lib/form-structure";
@@ -7,9 +8,12 @@ import type { FormStructure } from "@/lib/form-structure";
 const log = createLogger("ai-analyze");
 
 export async function POST(request: NextRequest) {
+  // runtime-env.json から API キー等を注入（electron:dev 対応）
+  loadRuntimeEnv();
+
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(
-      { error: "OPENAI_API_KEY が設定されていません (.env.local を確認)" },
+      { error: "OPENAI_API_KEY が設定されていません（設定画面で設定してください）" },
       { status: 500 }
     );
   }

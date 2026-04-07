@@ -26,12 +26,28 @@ import { messageFromFailedResponse, parseJsonResponse } from "@/lib/api-response
 
 type Step = "upload" | "preview" | "analyzing" | "result";
 
+type ConfigStatus = {
+  hasApiKey: boolean;
+  aiModel: string;
+  aiBaseURL: string;
+  eprintPath: boolean;
+  ready: boolean;
+};
+
 export default function Home() {
   const [step, setStep] = useState<Step>("upload");
   const [formStructure, setFormStructure] = useState<FormStructure | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // activeTab and selectedNetworkId are now managed inside EditorShell's EditorContext
+  const [configStatus, setConfigStatus] = useState<ConfigStatus | null>(null);
+
+  // 起動時に設定状態をチェック
+  useEffect(() => {
+    fetch("/api/config-status")
+      .then((res) => res.json())
+      .then((status: ConfigStatus) => setConfigStatus(status))
+      .catch(() => {}); // ネットワークエラー時は無視
+  }, []);
 
   const handleParsed = useCallback((data: FormStructure) => {
     setFormStructure(data);
@@ -230,6 +246,21 @@ export default function Home() {
           </div>
         )}
 
+        {/* Config missing banner */}
+        {configStatus && !configStatus.ready && step !== "result" && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-700 animate-fade-in-up">
+            <svg className="h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            <span>
+              API キーが設定されていません。
+              <a href="/settings" className="ml-1 font-semibold underline hover:text-amber-900">
+                設定画面で設定してください
+              </a>
+            </span>
+          </div>
+        )}
+
         {/* Error banner */}
         {error && (
           <div className="mb-6 flex items-center gap-3 rounded-lg border-l-4 border-red-400 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fade-in-up">
@@ -324,6 +355,11 @@ export default function Home() {
                   <span className="text-xs text-slate-400">
                     {analysisResult.summary.totalClusters} クラスター検出
                   </span>
+                  {configStatus?.aiModel && (
+                    <span className="text-[10px] text-slate-400 bg-slate-100 rounded px-1.5 py-0.5 font-mono">
+                      {configStatus.aiModel}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   <button

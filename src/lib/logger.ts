@@ -52,15 +52,18 @@ function resolveUserDataPath(): string | null {
   if (process.env.USER_DATA_PATH) return process.env.USER_DATA_PATH;
 
   // 2. 開発モードフォールバック: OS 標準の AppData パス
-  const appName = "jp.kondo723.app";
-  if (process.platform === "win32" && process.env.APPDATA) {
-    return path.join(process.env.APPDATA, appName);
-  }
-  if (process.platform === "darwin" && process.env.HOME) {
-    return path.join(process.env.HOME, "Library", "Application Support", appName);
-  }
-  if (process.env.HOME) {
-    return path.join(process.env.HOME, ".config", appName);
+  // dev モードでは "next-i-reporter"、パッケージ版では "jp.kondo723.app"
+  const appNames = ["next-i-reporter", "jp.kondo723.app"];
+  for (const appName of appNames) {
+    let dir: string | null = null;
+    if (process.platform === "win32" && process.env.APPDATA) {
+      dir = path.join(process.env.APPDATA, appName);
+    } else if (process.platform === "darwin" && process.env.HOME) {
+      dir = path.join(process.env.HOME, "Library", "Application Support", appName);
+    } else if (process.env.HOME) {
+      dir = path.join(process.env.HOME, ".config", appName);
+    }
+    if (dir && existsSync(dir)) return dir;
   }
 
   return null;
