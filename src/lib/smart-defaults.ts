@@ -7,6 +7,9 @@
 
 import type { ClusterDefinition } from "./form-structure";
 import { CLUSTER_TYPES, CLUSTER_TYPES_FULL } from "./form-structure";
+import { createLogger } from "./logger";
+
+const log = createLogger("smart-defaults");
 
 // --- パラメータ定義テーブル ---
 
@@ -382,7 +385,9 @@ export function getSmartDefault(name: string, typeCode: number): string | null {
 export function applySmartDefaults(
   clusters: ClusterDefinition[]
 ): ClusterDefinition[] {
-  return clusters.map((cluster) => {
+  const applied: Array<{ name: string; typeName: string }> = [];
+
+  const result = clusters.map((cluster) => {
     // AI が既に十分なパラメータを設定していれば変更しない
     if (hasDetailedParameters(cluster.inputParameters)) {
       return cluster;
@@ -393,9 +398,20 @@ export function applySmartDefaults(
       return cluster;
     }
 
+    applied.push({ name: cluster.name, typeName: cluster.typeName });
     return {
       ...cluster,
       inputParameters: smartDefault,
     };
   });
+
+  if (applied.length > 0) {
+    log.info("Smart defaults applied", {
+      totalClusters: clusters.length,
+      defaultsApplied: applied.length,
+      clusters: applied,
+    });
+  }
+
+  return result;
 }

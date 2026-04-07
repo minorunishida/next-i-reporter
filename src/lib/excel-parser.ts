@@ -6,6 +6,7 @@ import type {
   CellStyle,
   PageSetup,
 } from "./form-structure";
+import { createLogger } from "./logger";
 
 /** Excel の行高さ/列幅のデフォルト値 (px 換算) */
 const DEFAULT_ROW_HEIGHT = 20;
@@ -89,16 +90,39 @@ function parseSheet(
     }
   }
 
-  // デバッグ: SheetJS の列幅の生データ
-  console.log(`[excel-parser] Sheet "${name}" ref=${ref} rowCount=${rowCount} colCount=${colCount}`);
-  console.log(`[excel-parser] colWidths (first 10):`, colWidths.slice(0, 10).map((w, i) => {
-    const ci = ws["!cols"]?.[i];
-    return { col: i, px: w, raw: ci ? { wch: ci.wch, wpx: ci.wpx, width: ci.width } : "default" };
-  }));
-  console.log(`[excel-parser] totalWidth=${colWidths.reduce((a, b) => a + b, 0).toFixed(1)} totalHeight=${rowHeights.reduce((a, b) => a + b, 0).toFixed(1)}`);
-
   // ページ設定の抽出
   const pageSetup = extractPageSetup(ws);
+
+  // 構造化ログ
+  const log = createLogger("excel-parser");
+  const defaultRowCount = rowHeights.filter((h) => h === DEFAULT_ROW_HEIGHT).length;
+  const defaultColCount = colWidths.filter((w) => w === DEFAULT_COL_WIDTH).length;
+  log.info("Sheet parsed", {
+    sheetName: name,
+    ref,
+    rowCount,
+    colCount,
+    rowHeightStats: {
+      min: Math.min(...rowHeights),
+      max: Math.max(...rowHeights),
+      avg: +(rowHeights.reduce((a, b) => a + b, 0) / rowHeights.length).toFixed(1),
+      defaultCount: defaultRowCount,
+    },
+    colWidthStats: {
+      min: Math.min(...colWidths),
+      max: Math.max(...colWidths),
+      avg: +(colWidths.reduce((a, b) => a + b, 0) / colWidths.length).toFixed(1),
+      defaultCount: defaultColCount,
+    },
+    totalWidth: +colWidths.reduce((a, b) => a + b, 0).toFixed(1),
+    totalHeight: +rowHeights.reduce((a, b) => a + b, 0).toFixed(1),
+  });
+  log.info("Page setup", {
+    sheetName: name,
+    orientation: pageSetup.orientation,
+    paperSize: pageSetup.paperSize,
+    marginsMm: pageSetup.margins,
+  });
 
   // 累積座標の事前計算
   const rowTops = cumulativeSum(rowHeights);
@@ -160,6 +184,24 @@ function parseSheet(
       });
     }
   }
+
+  // セル統計ログ
+  const dvTypes = new Map<string, number>();
+  for (const c of cells) {
+    if (c.dataValidation) {
+      dvTypes.set(c.dataValidation.type, (dvTypes.get(c.dataValidation.type) ?? 0) + 1);
+    }
+  }
+  log.info("Cell statistics", {
+    sheetName: name,
+    totalGridCells: rowCount * colCount,
+    extractedCells: cells.length,
+    cellsWithValues: cells.filter((c) => c.value).length,
+    cellsWithFormulas: cells.filter((c) => c.formula).length,
+    mergedCells: cells.filter((c) => c.isMerged).length,
+    dataValidationCells: cells.filter((c) => c.dataValidation).length,
+    dataValidationTypes: Object.fromEntries(dvTypes),
+  });
 
   return {
     name,

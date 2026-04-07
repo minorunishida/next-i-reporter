@@ -8,10 +8,29 @@
  */
 
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { writeFile, readFile, unlink, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import type { PrintMeta } from "./form-structure";
+import { createLogger } from "./logger";
+
+const log = createLogger("excel-to-pdf");
+
+/** バンドル版 eprint.exe のパスを探す (electron:dev / packaged 両対応) */
+function resolveBundledEprint(): string | null {
+  // プロジェクトルートの resources/eprint/ (開発モード)
+  const devPath = path.join(process.cwd(), "resources", "eprint", "eprint.exe");
+  if (existsSync(devPath)) return devPath;
+  // パッケージ版 (process.resourcesPath は Electron が設定)
+  const resourcesPath = (process as any).resourcesPath as string | undefined;
+  if (resourcesPath) {
+    const pkgPath = path.join(resourcesPath, "eprint", "eprint.exe");
+    if (existsSync(pkgPath)) return pkgPath;
+  }
+  return null;
+}
 
 export type PdfConversionResult = {
   pdfBuffer: Buffer;
@@ -22,8 +41,8 @@ export async function convertExcelToPdf(
   excelBuffer: Buffer,
   fileName: string
 ): Promise<PdfConversionResult | null> {
-  // 1. eprint CLI
-  const eprintPath = process.env.EPRINT_CLI_PATH;
+  // 1. eprint CLI (環境変数 or バンドル版フォールバック)
+  const eprintPath = process.env.EPRINT_CLI_PATH || resolveBundledEprint();
   if (eprintPath) {
     return convertViaEprintCli(eprintPath, excelBuffer, fileName);
   }
@@ -34,7 +53,7 @@ export async function convertExcelToPdf(
     return buf ? { pdfBuffer: buf } : null;
   }
 
-  console.warn("[excel-to-pdf] 変換手段なし — ブランク PDF にフォールバック");
+  log.warn("変換手段なし — ブランク PDF にフォールバック");
   return null;
 }
 
@@ -52,12 +71,12 @@ async function convertViaEprintCli(
   try {
     await writeFile(inputPath, excelBuffer);
 
-    console.log(`[excel-to-pdf] eprint CLI: ${eprintPath}`);
-    const stdout = await execFileAsync(eprintPath, [
-      inputPath,
-      outputPath,
-      "--meta",
-    ]);
+    const args = [inputPath, outputPath, "--meta"];
+    log.info("eprint CLI invocation", { eprintPath, args });
+
+    const startTime = performance.now();
+    const stdout = await execFileAsync(eprintPath, args);
+    const elapsedMs = Math.round(performance.now() - startTime);
 
     const meta = JSON.parse(stdout) as {
       pdfPath: string;
@@ -65,13 +84,38 @@ async function convertViaEprintCli(
     };
 
     const pdfBuffer = await readFile(outputPath);
-    console.log(
-      `[excel-to-pdf] PDF generated: ${pdfBuffer.length} bytes, ${meta.sheets.length} sheets`
-    );
+    log.info("eprint conversion complete", {
+      elapsedMs,
+      pdfSizeBytes: pdfBuffer.length,
+      sheetsCount: meta.sheets.length,
+    });
+
+    // シート別 printMeta サマリ
+    for (const sheet of meta.sheets) {
+      log.info("printMeta summary", {
+        sheetName: sheet.name,
+        rows: sheet.rows?.length ?? 0,
+        cols: sheet.columns?.length ?? 0,
+        marginsPt: sheet.margins,
+        pageDimensionsPt: {
+          width: sheet.pdfPageWidthPt,
+          height: sheet.pdfPageHeightPt,
+        },
+        zoom: sheet.zoom,
+        fitToPage: {
+          wide: sheet.fitToPagesWide,
+          tall: sheet.fitToPagesTall,
+        },
+        printArea: sheet.printArea,
+        usedRange: sheet.usedRange,
+      });
+    }
 
     return { pdfBuffer, printMeta: meta.sheets };
   } catch (e) {
-    console.error("[excel-to-pdf] eprint CLI error:", e);
+    log.error("eprint CLI error", {
+      error: e instanceof Error ? e.message : String(e),
+    });
     return null;
   } finally {
     // 一時ファイル削除
@@ -107,32 +151,58 @@ async function convertViaGraphApi(
   excelBuffer: Buffer,
   fileName: string
 ): Promise<Buffer | null> {
+  const tenantId = process.env.AZURE_TENANT_ID!;
+  const clientId = process.env.AZURE_CLIENT_ID!;
+  const clientSecret = process.env.AZURE_CLIENT_SECRET!;
+
   try {
-    const { getGraphClient } = await import("./graph-client");
-    const client = getGraphClient();
-    const tempPath = `next-i-reporter-temp/${Date.now()}_${fileName}`;
+    // 1. Get access token
+    const tokenRes = await fetch(
+      `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: clientId,
+          client_secret: clientSecret,
+          scope: "https://graph.microsoft.com/.default",
+        }),
+      }
+    );
+    const tokenData = (await tokenRes.json()) as { access_token: string };
+    const token = tokenData.access_token;
+    const headers = { Authorization: `Bearer ${token}` };
 
-    console.log(`[excel-to-pdf] Graph API: uploading to ${tempPath}`);
-    const uploadRes = await client
-      .api(`/drive/root:/${tempPath}:/content`)
-      .putStream(excelBuffer);
-    const itemId = uploadRes.id;
+    // 2. Upload to OneDrive temp location
+    const tempPath = `_temp_convert/${Date.now()}_${fileName}`;
+    log.info("Graph API: uploading", { tempPath });
+    const uploadRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drive/root:/${tempPath}:/content`,
+      { method: "PUT", headers: { ...headers, "Content-Type": "application/octet-stream" }, body: new Uint8Array(excelBuffer) }
+    );
+    const uploadData = (await uploadRes.json()) as { id: string };
+    const itemId = uploadData.id;
 
-    if (!itemId) throw new Error("item ID が取得できません");
+    // 3. Download as PDF
+    const pdfRes = await fetch(
+      `https://graph.microsoft.com/v1.0/drive/items/${itemId}/content?format=pdf`,
+      { headers }
+    );
+    const pdfBuffer = Buffer.from(await pdfRes.arrayBuffer());
+    log.info("Graph API: PDF generated", { pdfSizeBytes: pdfBuffer.length });
 
-    const pdfResponse = await client
-      .api(`/drive/items/${itemId}/content?format=pdf`)
-      .responseType("arraybuffer" as any)
-      .get();
+    // 4. Cleanup temp file
+    await fetch(`https://graph.microsoft.com/v1.0/drive/items/${itemId}`, {
+      method: "DELETE",
+      headers,
+    }).catch(() => {});
 
-    // 一時ファイル削除
-    client.api(`/drive/items/${itemId}`).delete().catch(() => {});
-
-    const pdfBuffer = Buffer.from(pdfResponse);
-    console.log(`[excel-to-pdf] PDF generated: ${pdfBuffer.length} bytes`);
     return pdfBuffer;
   } catch (e) {
-    console.error("[excel-to-pdf] Graph API error:", e);
+    log.error("Graph API error", {
+      error: e instanceof Error ? e.message : String(e),
+    });
     return null;
   }
 }

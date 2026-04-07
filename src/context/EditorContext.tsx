@@ -17,7 +17,7 @@ import type {
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
-export type ActiveTab = "clusters" | "networks" | "carbonCopy";
+export type ActiveTab = "clusters" | "networks" | "carbonCopy" | "logs";
 export type EditorMode = "select" | "create" | "network" | "carbonCopy";
 export type ConfidenceFilter = "all" | "high" | "medium" | "low";
 

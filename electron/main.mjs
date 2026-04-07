@@ -9,6 +9,18 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, safeStorage } from "e
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ---- バンドル eprint パス解決 ----
+
+function resolveBundledEprintPath() {
+  if (app.isPackaged) {
+    const p = path.join(process.resourcesPath, "eprint", "eprint.exe");
+    return existsSync(p) ? p : null;
+  }
+  // 開発時: プロジェクトルートの resources/eprint/
+  const p = path.join(process.cwd(), "resources", "eprint", "eprint.exe");
+  return existsSync(p) ? p : null;
+}
+
 // ---- 設定ストレージ ----
 
 function settingsFilePath() {
@@ -174,6 +186,13 @@ function loadEnvFiles() {
   const storedSettings = readSettings();
   if (storedSettings.EPRINT_CLI_PATH) {
     process.env.EPRINT_CLI_PATH = storedSettings.EPRINT_CLI_PATH;
+  } else {
+    // バンドル版 eprint をデフォルトに使用
+    const bundledEprint = resolveBundledEprintPath();
+    if (bundledEprint) {
+      process.env.EPRINT_CLI_PATH = bundledEprint;
+      logLine(`eprint: using bundled path ${bundledEprint}`);
+    }
   }
 
   // Next.js サーバーが settings.json を読むためのパス

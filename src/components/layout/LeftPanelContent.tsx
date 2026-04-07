@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { LogViewer } from "@/components/LogViewer";
 import type {
   ClusterDefinition,
   ClusterTypeName,
@@ -456,6 +457,13 @@ export function LeftPanelContent({
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* Log viewer (logs tab) */}
+      {activeTab === "logs" && (
+        <div className="flex-1 overflow-hidden">
+          <LogViewer />
         </div>
       )}
     </div>

@@ -1,4 +1,7 @@
 import type { ClusterDefinition } from "./form-structure";
+import { createLogger } from "./logger";
+
+const log = createLogger("overlap-utils");
 
 /**
  * 同一シート内で重なるクラスターを検出し、重複を除去する。
@@ -7,6 +10,7 @@ import type { ClusterDefinition } from "./form-structure";
  */
 export function removeOverlaps(clusters: ClusterDefinition[]): ClusterDefinition[] {
   const result: ClusterDefinition[] = [];
+  let removedCount = 0;
 
   for (const cluster of clusters) {
     const overlapping = result.find(
@@ -21,10 +25,27 @@ export function removeOverlaps(clusters: ClusterDefinition[]): ClusterDefinition
       // 重なりがある場合、confidence が高い方を残す
       if (cluster.confidence > overlapping.confidence) {
         const idx = result.indexOf(overlapping);
+        log.info("Overlap removed", {
+          removed: { name: overlapping.name, confidence: overlapping.confidence },
+          keptInstead: { name: cluster.name, confidence: cluster.confidence },
+        });
         result[idx] = cluster;
+      } else {
+        log.info("Overlap removed", {
+          removed: { name: cluster.name, confidence: cluster.confidence },
+          keptInstead: { name: overlapping.name, confidence: overlapping.confidence },
+        });
       }
-      // overlapping の方が高い or 同等なら cluster を捨てる
+      removedCount++;
     }
+  }
+
+  if (removedCount > 0) {
+    log.info("Overlap removal summary", {
+      inputClusters: clusters.length,
+      outputClusters: result.length,
+      removed: removedCount,
+    });
   }
 
   return result;

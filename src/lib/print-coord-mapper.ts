@@ -7,6 +7,27 @@
 
 import type { SheetStructure, PrintMeta } from "./form-structure";
 
+// Logger interface (duplicated to avoid importing logger.ts in client bundle)
+type LogFn = (message: string, data?: Record<string, unknown>) => void;
+type SimpleLogger = { debug: LogFn; info: LogFn; warn: LogFn; error: LogFn };
+
+// Lazy-load logger only on server side to avoid bundling node:fs in browser
+let _log: SimpleLogger | null = null;
+let _logChecked = false;
+function getLog(): SimpleLogger | null {
+  if (_logChecked) return _log;
+  _logChecked = true;
+  if (typeof window !== "undefined") return null;
+  try {
+    // Dynamic path that webpack cannot statically analyze
+    const modulePath = "./logger";
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require(/* webpackIgnore: true */ modulePath);
+    _log = mod.createLogger("print-coord-mapper");
+  } catch { /* ignore */ }
+  return _log;
+}
+
 export type PdfRect = {
   top: number;
   bottom: number;
@@ -189,25 +210,26 @@ export function mapClusterRegionToPdf(
     bottom: (content.top + relBottom * content.height) / pageH,
   };
 
-  // デバッグ出力 (最初の3クラスターのみ、数値展開済み)
-  if (typeof window !== "undefined") {
-    if (!(window as any).__pdfMapDebugCount) (window as any).__pdfMapDebugCount = 0;
-    if ((window as any).__pdfMapDebugCount < 3) {
-      (window as any).__pdfMapDebugCount++;
-      const n = (v: number) => Math.round(v * 10000) / 10000;
-      console.log(`[coord-mapper] #${(window as any).__pdfMapDebugCount} region(px): T=${n(region.top)} B=${n(region.bottom)} L=${n(region.left)} R=${n(region.right)}`);
-      console.log(`  → pt: T=${n(ptTop)} B=${n(ptBottom)} L=${n(ptLeft)} R=${n(ptRight)}`);
-      console.log(`  printArea: T=${pa.top} L=${pa.left} W=${pa.width} H=${pa.height}`);
-      console.log(`  relative: T=${n(relTop)} B=${n(relBottom)} L=${n(relLeft)} R=${n(relRight)}`);
-      console.log(`  content: L=${n(content.left)} T=${n(content.top)} W=${n(content.width)} H=${n(content.height)} scale=${n(content.scale)}`);
-      console.log(`  margins: T=${printMeta.margins.top} B=${printMeta.margins.bottom} L=${printMeta.margins.left} R=${printMeta.margins.right} header=${printMeta.margins.header} footer=${printMeta.margins.footer}`);
-      console.log(`  contentArea: W=${n(printMeta.pdfPageWidthPt - printMeta.margins.left - printMeta.margins.right)} H=${n(printMeta.pdfPageHeightPt - printMeta.margins.top - printMeta.margins.bottom)}`);
-      console.log(`  scaleX=${n((printMeta.pdfPageWidthPt - printMeta.margins.left - printMeta.margins.right) / pa.width)} scaleY=${n((printMeta.pdfPageHeightPt - printMeta.margins.top - printMeta.margins.bottom) / pa.height)}`);
-      console.log(`  page: ${pageW} x ${pageH}`);
-      console.log(`  result: T=${n(result.top)} B=${n(result.bottom)} L=${n(result.left)} R=${n(result.right)}`);
-      console.log(`  colPairs[0..2]:`, colPairs.slice(0, 3).map(p => `px=${n(p.px)}→pt=${n(p.pt)}`).join(", "));
-      console.log(`  colPairs[-2..]:`, colPairs.slice(-2).map(p => `px=${n(p.px)}→pt=${n(p.pt)}`).join(", "));
-    }
+  // 座標監査証跡 — サーバーサイドのみ構造化ログ出力
+  const log = getLog();
+  if (log) {
+    // pt → mm 変換 (1pt = 25.4/72 mm)
+    const ptToMm = (pt: number) => +(pt * 25.4 / 72).toFixed(2);
+    const pdfToMm = (norm: number, pagePt: number) => +(norm * pagePt * 25.4 / 72).toFixed(2);
+
+    log.debug("Coordinate mapping", {
+      regionPx: { top: +region.top.toFixed(1), bottom: +region.bottom.toFixed(1), left: +region.left.toFixed(1), right: +region.right.toFixed(1) },
+      ptRegion: { top: +ptTop.toFixed(2), bottom: +ptBottom.toFixed(2), left: +ptLeft.toFixed(2), right: +ptRight.toFixed(2) },
+      relative: { top: +relTop.toFixed(4), bottom: +relBottom.toFixed(4), left: +relLeft.toFixed(4), right: +relRight.toFixed(4) },
+      pdfNormalized: { top: +result.top.toFixed(4), bottom: +result.bottom.toFixed(4), left: +result.left.toFixed(4), right: +result.right.toFixed(4) },
+      mmOnPaper: {
+        top: pdfToMm(result.top, pageH),
+        bottom: pdfToMm(result.bottom, pageH),
+        left: pdfToMm(result.left, pageW),
+        right: pdfToMm(result.right, pageW),
+      },
+      anchorPoints: { rows: rowPairs.length, cols: colPairs.length },
+    });
   }
 
   return result;

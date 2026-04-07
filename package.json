@@ -76,6 +76,13 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/eprint",
+        "to": "eprint",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {

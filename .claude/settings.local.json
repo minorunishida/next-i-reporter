@@ -11,7 +11,9 @@
       "Bash(node -e ':*)",
       "Bash(npx tsc:*)",
       "Bash(npm test:*)",
-      "Bash(xargs wc:*)"
+      "Bash(xargs wc:*)",
+      "Bash(npx node:*)",
+      "Bash(npx next:*)"
     ]
   }
 }

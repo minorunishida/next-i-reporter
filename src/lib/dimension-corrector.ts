@@ -1,4 +1,7 @@
 import type { SheetStructure, PrintMeta } from "./form-structure";
+import { createLogger } from "./logger";
+
+const log = createLogger("dimension-corrector");
 
 /**
  * printMeta の正確な pt データを使って、SheetJS の不正確な colWidths/rowHeights を補正する。
@@ -9,6 +12,15 @@ import type { SheetStructure, PrintMeta } from "./form-structure";
  * これにより補間マッパーの px 側と pt 側が同じ比率になり、補間が恒等変換に近づく。
  */
 export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: PrintMeta) {
+  const beforeTotalWidth = sheet.totalWidth;
+  const beforeTotalHeight = sheet.totalHeight;
+  let rowsCorrected = 0;
+  let colsCorrected = 0;
+  let maxRowDelta = 0;
+  let maxColDelta = 0;
+  let sumRowDelta = 0;
+  let sumColDelta = 0;
+
   // 可視行のみで補正（hidden 行は高さ 0 として扱う）
   if (meta.rows.length > 0) {
     const maxRow = meta.rows[meta.rows.length - 1].row; // 1-based
@@ -19,7 +31,14 @@ export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: Prin
     for (const r of meta.rows) {
       const idx = r.row - 1;
       if (idx >= 0 && idx < maxRow) {
-        newRowHeights[idx] = r.hidden ? 0 : r.height;
+        const newVal = r.hidden ? 0 : r.height;
+        const delta = Math.abs(newVal - newRowHeights[idx]);
+        if (delta > 0.01) {
+          rowsCorrected++;
+          sumRowDelta += delta;
+          if (delta > maxRowDelta) maxRowDelta = delta;
+        }
+        newRowHeights[idx] = newVal;
       }
     }
     sheet.rowHeights = newRowHeights;
@@ -36,7 +55,14 @@ export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: Prin
     for (const c of meta.columns) {
       const idx = c.col - 1;
       if (idx >= 0 && idx < maxCol) {
-        newColWidths[idx] = c.hidden ? 0 : c.width;
+        const newVal = c.hidden ? 0 : c.width;
+        const delta = Math.abs(newVal - newColWidths[idx]);
+        if (delta > 0.01) {
+          colsCorrected++;
+          sumColDelta += delta;
+          if (delta > maxColDelta) maxColDelta = delta;
+        }
+        newColWidths[idx] = newVal;
       }
     }
     sheet.colWidths = newColWidths;
@@ -67,4 +93,19 @@ export function correctDimensionsFromPrintMeta(sheet: SheetStructure, meta: Prin
       right: colLefts[endCol + 1] ?? colLefts[endCol] ?? 0,
     };
   }
+
+  log.info("Dimension correction summary", {
+    sheetName: sheet.name ?? meta.name,
+    rowsCorrected,
+    colsCorrected,
+    avgRowDelta: rowsCorrected > 0 ? +(sumRowDelta / rowsCorrected).toFixed(2) : 0,
+    maxRowDelta: +maxRowDelta.toFixed(2),
+    avgColDelta: colsCorrected > 0 ? +(sumColDelta / colsCorrected).toFixed(2) : 0,
+    maxColDelta: +maxColDelta.toFixed(2),
+    beforeTotalWidth: +beforeTotalWidth.toFixed(1),
+    afterTotalWidth: +sheet.totalWidth.toFixed(1),
+    beforeTotalHeight: +beforeTotalHeight.toFixed(1),
+    afterTotalHeight: +sheet.totalHeight.toFixed(1),
+    cellsRecalculated: sheet.cells.length,
+  });
 }

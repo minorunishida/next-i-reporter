@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { performance } from "node:perf_hooks";
 import type {
   FormStructure,
   SheetStructure,
@@ -8,6 +9,9 @@ import type {
 import { applySmartDefaults } from "./smart-defaults";
 import { removeOverlaps } from "./overlap-utils";
 import { loadAiConfig } from "./ai-config";
+import { createLogger } from "./logger";
+
+const log = createLogger("ai-analyzer");
 
 /**
  * FormStructure を AI に送り、クラスター定義を推測させる
@@ -59,6 +63,21 @@ async function analyzeSheet(
     return false;
   });
 
+  log.info("Cell filtering", {
+    sheetName: sheet.name,
+    totalCells: sheet.cells.length,
+    meaningfulCells: meaningfulCells.length,
+    excluded: sheet.cells.length - meaningfulCells.length,
+    filterBreakdown: {
+      hasValue: sheet.cells.filter((c) => c.value).length,
+      hasFormula: sheet.cells.filter((c) => c.formula).length,
+      isMerged: sheet.cells.filter((c) => c.isMerged).length,
+      hasDataValidation: sheet.cells.filter((c) => c.dataValidation).length,
+      hasBorders: sheet.cells.filter((c) => c.style.borderTop || c.style.borderBottom || c.style.borderLeft || c.style.borderRight).length,
+      hasBgColor: sheet.cells.filter((c) => c.style.bgColor).length,
+    },
+  });
+
   // AI に渡すセル情報を簡略化
   const cellsSummary = meaningfulCells.map((c) => ({
     addr: c.address,
@@ -89,8 +108,17 @@ async function analyzeSheet(
     0
   );
 
+  const payloadBytes = Buffer.byteLength(userMessage, "utf8");
   const config = loadAiConfig();
+  log.info("AI request", {
+    sheetName: sheet.name,
+    model: config.model,
+    payloadBytes,
+    cellCount: cellsSummary.length,
+  });
+
   const openai = new OpenAI(config.baseURL ? { baseURL: config.baseURL } : {});
+  const aiStartTime = performance.now();
 
   const response = await openai.responses.create({
     model: config.model,
@@ -181,20 +209,52 @@ async function analyzeSheet(
     },
   });
 
+  const aiElapsedMs = Math.round(performance.now() - aiStartTime);
   const text = response.output_text;
+
+  log.info("AI response received", {
+    sheetName: sheet.name,
+    elapsedMs: aiElapsedMs,
+    model: config.model,
+    usage: (response as any).usage ?? null,
+    responseLength: text.length,
+  });
 
   let parsed: { clusters: Array<Record<string, unknown>> };
   try {
     parsed = JSON.parse(text);
   } catch {
-    console.error("[ai-analyzer] Failed to parse AI response:", text.slice(0, 200));
+    log.error("Failed to parse AI response", { text: text.slice(0, 500) });
     return [];
   }
 
   if (!Array.isArray(parsed?.clusters)) {
-    console.error("[ai-analyzer] Unexpected response shape:", Object.keys(parsed ?? {}));
+    log.error("Unexpected response shape", { keys: Object.keys(parsed ?? {}) });
     return [];
   }
+
+  // クラスター別ログ
+  for (const c of parsed.clusters) {
+    log.debug("Cluster detected", {
+      name: c.name,
+      typeName: c.typeName,
+      confidence: c.confidence,
+      cellAddress: c.cellAddress,
+      region: c.region,
+    });
+  }
+
+  // 信頼度分布
+  const high = parsed.clusters.filter((c) => Number(c.confidence) >= 0.9).length;
+  const medium = parsed.clusters.filter((c) => Number(c.confidence) >= 0.7 && Number(c.confidence) < 0.9).length;
+  const low = parsed.clusters.filter((c) => Number(c.confidence) < 0.7).length;
+  log.info("Confidence distribution", {
+    sheetName: sheet.name,
+    total: parsed.clusters.length,
+    high,
+    medium,
+    low,
+  });
 
   return parsed.clusters.map((c, i) => ({
     id: `${sheet.index}-${i}`,

@@ -3,7 +3,9 @@ import { buildCellCommentCatalog } from "@/lib/cell-comment-catalog";
 import { parseExcel } from "@/lib/excel-parser";
 import { convertExcelToPdf } from "@/lib/excel-to-pdf";
 import { correctDimensionsFromPrintMeta } from "@/lib/dimension-corrector";
+import { createLogger } from "@/lib/logger";
 
+const log = createLogger("parse-excel");
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function POST(request: NextRequest) {
@@ -30,6 +32,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = await file.arrayBuffer();
+    log.info("File received", { fileName: file.name, sizeBytes: file.size });
 
     // Excel バイナリを Base64 保持 (definitionFile 用)。ブックはそのまま保持。
     const excelBase64 = Buffer.from(buffer).toString("base64");
@@ -40,26 +43,43 @@ export async function POST(request: NextRequest) {
       convertExcelToPdf(Buffer.from(buffer), file.name),
     ]);
 
+    log.info("Excel parsed", {
+      fileName: file.name,
+      sheetsCount: formStructure.sheets.length,
+      sheetNames: formStructure.sheets.map((s) => s.name),
+    });
+
     if (conversionResult) {
       // PDF を Base64 化して FormStructure に含める
       formStructure.pdfBase64 = conversionResult.pdfBuffer.toString("base64");
-      console.log(`[parse-excel] PDF generated: ${conversionResult.pdfBuffer.length} bytes`);
+      log.info("PDF generated", { pdfSizeBytes: conversionResult.pdfBuffer.length });
 
       // 印刷メタ情報をシートに紐づけ + 列幅/行高さを補正
       if (conversionResult.printMeta) {
         for (const meta of conversionResult.printMeta) {
           const sheet = formStructure.sheets.find((s) => s.name === meta.name);
           if (sheet) {
+            // 補正前の寸法を記録
+            const beforeW = sheet.totalWidth;
+            const beforeH = sheet.totalHeight;
             sheet.printMeta = meta;
-            // printMeta の正確な pt データで colWidths/rowHeights を補正
-            // SheetJS が DEFAULT (64px) を返す場合に特に重要
             correctDimensionsFromPrintMeta(sheet, meta);
+
+            log.info("SheetJS vs eprint comparison", {
+              sheetName: sheet.name,
+              sheetjsTotalWidth: +beforeW.toFixed(1),
+              eprintTotalWidth: +sheet.totalWidth.toFixed(1),
+              widthDelta: +(sheet.totalWidth - beforeW).toFixed(1),
+              sheetjsTotalHeight: +beforeH.toFixed(1),
+              eprintTotalHeight: +sheet.totalHeight.toFixed(1),
+              heightDelta: +(sheet.totalHeight - beforeH).toFixed(1),
+            });
           }
         }
-        console.log(`[parse-excel] Print meta attached: ${conversionResult.printMeta.length} sheets`);
+        log.info("Print meta attached", { sheetsCount: conversionResult.printMeta.length });
       }
     } else {
-      console.log("[parse-excel] PDF conversion skipped");
+      log.warn("PDF conversion skipped — no conversion method available");
     }
 
     // Excel バイナリを FormStructure に格納
@@ -71,7 +91,9 @@ export async function POST(request: NextRequest) {
 
     return Response.json(formStructure);
   } catch (e) {
-    console.error("[parse-excel]", e);
+    log.error("Parse failed", {
+      error: e instanceof Error ? e.message : String(e),
+    });
     const message = e instanceof Error ? e.message : "Excel 解析中にエラーが発生しました";
     return Response.json({ error: message }, { status: 500 });
   }

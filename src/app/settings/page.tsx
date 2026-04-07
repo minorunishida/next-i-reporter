@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+
 import { useEffect, useState } from "react";
 import {
   DEFAULT_SYSTEM_PROMPT,
@@ -67,11 +67,7 @@ export default function SettingsPage() {
 
   async function handleSave() {
     if (!window.electronAPI) return;
-    if (!eprintCliPath.trim()) {
-      setErrorMsg("eprint CLI パスを選択してください");
-      setStatus("error");
-      return;
-    }
+    // eprint パスは任意（未指定ならバンドル版を使用）
     setStatus("saving");
     setErrorMsg("");
     try {
@@ -134,9 +130,9 @@ export default function SettingsPage() {
         <div className="text-center text-sm text-slate-500">
           <p className="font-medium">この設定画面は Electron アプリ内でのみ利用できます。</p>
           <p className="mt-1 text-slate-400">開発時は <code className="font-mono">.env.local</code> を直接編集してください。</p>
-          <Link href="/" className="mt-3 inline-block text-indigo-500 hover:text-indigo-700 transition-colors">
+          <button onClick={() => window.history.back()} className="mt-3 inline-block text-indigo-500 hover:text-indigo-700 transition-colors">
             戻る
-          </Link>
+          </button>
         </div>
       </main>
     );
@@ -148,12 +144,12 @@ export default function SettingsPage() {
     <main className="flex min-h-[calc(100vh-2.5rem)] flex-col items-center px-4 py-8">
       <div className="w-full max-w-xl">
         <div className="mb-6 flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors">
+          <button onClick={() => window.history.back()} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
             戻る
-          </Link>
+          </button>
           <h1 className="text-lg font-semibold text-slate-900">設定</h1>
         </div>
 
@@ -208,19 +204,29 @@ export default function SettingsPage() {
         <section className="mb-6 rounded-xl border border-slate-200 bg-white p-5">
           <div className="mb-3 flex items-center gap-1.5">
             <h2 className="text-sm font-semibold text-slate-800">eprint CLI パス</h2>
-            <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-500 ring-1 ring-red-200">必須</span>
+            <span className="rounded-full bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 ring-1 ring-slate-200">任意</span>
           </div>
           <p className="mb-3 text-xs text-slate-400">
-            Excel → PDF 変換に使用するローカル実行ファイル (.exe) を選択してください。
+            Excel → PDF 変換に使用するローカル実行ファイル (.exe) を選択してください。未設定の場合はバンドル版を使用します。
           </p>
           <div className="flex gap-2">
             <input
               type="text"
               value={eprintCliPath}
               readOnly
-              placeholder="ファイルを選択してください..."
+              placeholder="バンドル版を使用（デフォルト）"
               className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono text-slate-700 placeholder:text-slate-300 cursor-default"
             />
+            {eprintCliPath && (
+              <button
+                type="button"
+                onClick={() => setEprintCliPath("")}
+                className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                title="クリアしてバンドル版に戻す"
+              >
+                クリア
+              </button>
+            )}
             <button
               type="button"
               onClick={handleBrowse}
