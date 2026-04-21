@@ -212,30 +212,26 @@ finalCoord = {
 
 **結果**: **0〜1 の正規化座標**（PDF ビューアで直接描画可能）
 
+実装では **`mapClusterBoundsToPdf(region, cellAddress, sheet, printMeta)`** を主に使います。`cellAddress` がシート上で解決でき、`printMeta.rows` / `columns` に該当行・列がある場合は、**px 補間を経ずに pt 境界を直参照**してから上記の相対化・PDF 正規化に進みます（Designer との差分を抑えるため）。`cellAddress` が空のときや直参照に失敗したときは従来どおり px 補間にフォールバックします。環境変数 `IREPORTER_COORD_DEBUG=1` でマッピング経路をログに出せます。`mapClusterRegionToPdf` は第2引数なしの後方互換 API です。
+
 ### コード実装例
 
 ```typescript
+// 推奨: cellAddress があると printMeta グリッド直参照で精度が上がる
+export function mapClusterBoundsToPdf(
+  region: PdfRect,
+  cellAddress: string | undefined,
+  sheet: SheetStructure,
+  printMeta: PrintMeta
+): PdfRect | null { /* ... */ }
+
+// 後方互換（px のみ）
 export function mapClusterRegionToPdf(
-  region: PdfRect,              // クラスターの px 座標
-  sheet: SheetStructure,        // SheetJS のデータ
-  printMeta: PrintMeta          // eprint から取得した正確な座標
-): PdfRect {
-  // 1. px → pt に補間マッピング
-  const ptTop = interpolate(rowPairs, region.top);
-  const ptBottom = interpolate(rowPairs, region.bottom);
-  const ptLeft = interpolate(colPairs, region.left);
-  const ptRight = interpolate(colPairs, region.right);
-
-  // 2. 印刷範囲内の相対位置に変換
-  const relTop = (ptTop - pa.top) / pa.height;
-  const relLeft = (ptLeft - pa.left) / pa.width;
-
-  // 3. PDF ページスケール + マージンを適用
-  return {
-    left: (content.left + relLeft * content.width) / pageWidth,
-    top: (content.top + relTop * content.height) / pageHeight,
-    // ... right, bottom も同様
-  };
+  region: PdfRect,
+  sheet: SheetStructure,
+  printMeta: PrintMeta
+): PdfRect | null {
+  return mapClusterBoundsToPdf(region, undefined, sheet, printMeta);
 }
 ```
 

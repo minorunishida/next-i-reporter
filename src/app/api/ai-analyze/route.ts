@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { analyzeForm } from "@/lib/ai-analyzer";
 import { loadRuntimeEnv } from "@/lib/ai-config";
-import { mapClusterRegionToPdf } from "@/lib/print-coord-mapper";
+import { mapClusterBoundsToPdfDetailed } from "@/lib/print-coord-mapper";
 import { createLogger } from "@/lib/logger";
 import type { FormStructure } from "@/lib/form-structure";
 
@@ -45,9 +45,15 @@ export async function POST(request: NextRequest) {
       const sheet = formStructure.sheets[cluster.sheetNo];
       if (!sheet?.printMeta) continue;
 
-      const pdfRect = mapClusterRegionToPdf(cluster.region, sheet, sheet.printMeta);
-      if (!pdfRect) continue;
+      const mapping = mapClusterBoundsToPdfDetailed(
+        cluster.region,
+        cluster.cellAddress,
+        sheet,
+        sheet.printMeta
+      );
+      if (!mapping) continue;
 
+      const pdfRect = mapping.pdf;
       const pageW = sheet.printMeta.pdfPageWidthPt;
       const pageH = sheet.printMeta.pdfPageHeightPt;
       const toMm = (norm: number, pagePt: number) => +(norm * pagePt * 25.4 / 72).toFixed(2);
@@ -57,6 +63,13 @@ export async function POST(request: NextRequest) {
         typeName: cluster.typeName,
         cellAddress: cluster.cellAddress,
         confidence: cluster.confidence,
+        coordMappingMode: mapping.mode,
+        ptRegionSheet: {
+          top: +mapping.ptRect.top.toFixed(2),
+          bottom: +mapping.ptRect.bottom.toFixed(2),
+          left: +mapping.ptRect.left.toFixed(2),
+          right: +mapping.ptRect.right.toFixed(2),
+        },
         regionPx: {
           top: +cluster.region.top.toFixed(1),
           bottom: +cluster.region.bottom.toFixed(1),

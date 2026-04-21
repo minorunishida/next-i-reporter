@@ -41,6 +41,14 @@ export default defineConfig({
           { text: "API リファレンス", link: "/development/api-reference" },
         ],
       },
+      {
+        text: "アーキテクチャ",
+        items: [
+          { text: "Designer 座標パイプライン対応", link: "/architecture/designer-coordinate-pipeline" },
+          { text: "クラスター型（外部参照）", link: "/architecture/cluster-types-external-reference" },
+          { text: "ネットワーク設定仕様", link: "/architecture/spec-network-settings" },
+        ],
+      },
     ],
 
     outline: {

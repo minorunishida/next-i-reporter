@@ -10,6 +10,7 @@ import { applySmartDefaults } from "./smart-defaults";
 import { removeOverlaps } from "./overlap-utils";
 import { loadAiConfig } from "./ai-config";
 import { createLogger } from "./logger";
+import { snapClusterRegionToCell } from "./cluster-region-snap";
 
 const log = createLogger("ai-analyzer");
 
@@ -256,22 +257,27 @@ async function analyzeSheet(
     low,
   });
 
-  return parsed.clusters.map((c, i) => ({
-    id: `${sheet.index}-${i}`,
-    name: String(c.name ?? ""),
-    type: Number(c.type ?? 30),
-    typeName: String(c.typeName ?? "KeyboardText") as ClusterDefinition["typeName"],
-    sheetNo: sheet.index,
-    cellAddress: String(c.cellAddress ?? ""),
-    region: c.region as ClusterDefinition["region"],
-    confidence: Number(c.confidence ?? 0.5),
-    value: c.value != null ? String(c.value) : undefined,
-    displayValue: c.value != null ? String(c.value) : undefined,
-    readOnly: Boolean(c.readOnly),
-    inputParameters: String(c.inputParameters ?? ""),
-    excelOutputValue: String(c.cellAddress ?? ""),
-    formula: c.formula != null ? String(c.formula) : undefined,
-  }));
+  return parsed.clusters.map((c, i) => {
+    const rawRegion = c.region as ClusterDefinition["region"];
+    const addr = String(c.cellAddress ?? "");
+    const region = snapClusterRegionToCell(sheet, addr, rawRegion);
+    return {
+      id: `${sheet.index}-${i}`,
+      name: String(c.name ?? ""),
+      type: Number(c.type ?? 30),
+      typeName: String(c.typeName ?? "KeyboardText") as ClusterDefinition["typeName"],
+      sheetNo: sheet.index,
+      cellAddress: addr,
+      region,
+      confidence: Number(c.confidence ?? 0.5),
+      value: c.value != null ? String(c.value) : undefined,
+      displayValue: c.value != null ? String(c.value) : undefined,
+      readOnly: Boolean(c.readOnly),
+      inputParameters: String(c.inputParameters ?? ""),
+      excelOutputValue: String(c.cellAddress ?? ""),
+      formula: c.formula != null ? String(c.formula) : undefined,
+    };
+  });
 }
 
 // ─── Single-region analysis ──────────────────────────────────────────────────

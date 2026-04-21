@@ -8,6 +8,9 @@ import {
   computePdfContentArea,
   computePrintAreaPx,
   mapClusterRegionToPdf,
+  mapClusterBoundsToPdf,
+  parseExcelA1Ref,
+  resolvePrintMetaCellBounds1Based,
 } from "./print-coord-mapper.ts";
 import type { PxPtPair } from "./print-coord-mapper.ts";
 import type { SheetStructure, PrintMeta } from "./form-structure.ts";
@@ -129,6 +132,26 @@ test("computePdfContentArea: with zoom=100 returns scale=1", () => {
   assert.ok(Math.abs(result.width - pm.usedRange.width) < 0.01);
 });
 
+test("computePdfContentArea: zoom 100 does not add horizontal center offset (Excel default left)", () => {
+  const pm = makePrintMeta({
+    zoom: 100,
+    usedRange: { startRow: 1, startCol: 1, endRow: 2, endCol: 2, top: 0, left: 0, width: 200, height: 100 },
+  });
+  const result = computePdfContentArea(pm);
+  assert.equal(result.left, pm.margins.left, "100% 時は左マージン起点（常時水平中央オフセットしない）");
+});
+
+test("computePdfContentArea: fit-to-page applies horizontal center offset when content narrower than area", () => {
+  const pm = makePrintMeta({
+    fitToPagesWide: 1,
+    usedRange: { startRow: 1, startCol: 1, endRow: 2, endCol: 2, top: 0, left: 0, width: 100, height: 100 },
+  });
+  const contentW = pm.pdfPageWidthPt - pm.margins.left - pm.margins.right;
+  const result = computePdfContentArea(pm);
+  const expectedOffset = (contentW - 100) / 2;
+  assert.ok(Math.abs(result.left - (pm.margins.left + expectedOffset)) < 0.01);
+});
+
 test("computePdfContentArea: with fitToPage and small content, scale capped at 1", () => {
   const pm = makePrintMeta({
     fitToPagesWide: 1,
@@ -172,6 +195,41 @@ test("computePrintAreaPx: basic computation", () => {
   assert.equal(result.height, 60); // all 3 rows
 });
 
+// --- parseExcelA1Ref ---
+
+test("parseExcelA1Ref: strips $ and parses column", () => {
+  assert.deepEqual(parseExcelA1Ref("$B$7"), { row: 7, col: 2 });
+  assert.deepEqual(parseExcelA1Ref("AA10"), { row: 10, col: 27 });
+});
+
+test("resolvePrintMetaCellBounds1Based: uses merge range in 1-based form", () => {
+  const sheet: SheetStructure = {
+    name: "S",
+    index: 0,
+    rowCount: 3,
+    colCount: 3,
+    rowHeights: [10, 10, 10],
+    colWidths: [10, 10, 10],
+    totalWidth: 30,
+    totalHeight: 30,
+    cells: [
+      {
+        address: "A1",
+        row: 0,
+        col: 0,
+        value: "",
+        isMerged: true,
+        mergeRange: { startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+        region: { top: 0, bottom: 20, left: 0, right: 20 },
+        style: {},
+      },
+    ],
+    pageSetup: { orientation: "portrait", paperSize: "A4", margins: { top: 10, bottom: 10, left: 10, right: 10 } },
+  };
+  const b = resolvePrintMetaCellBounds1Based(sheet, "A1");
+  assert.deepEqual(b, { row1: 1, row2: 2, col1: 1, col2: 2 });
+});
+
 // --- mapClusterRegionToPdf ---
 
 test("mapClusterRegionToPdf: returns null when print area has zero dimensions", () => {
@@ -209,4 +267,50 @@ test("mapClusterRegionToPdf: returns 0-1 normalized coordinates", () => {
   assert.ok(result.right >= 0 && result.right <= 1, `right ${result.right} out of range`);
   assert.ok(result.bottom > result.top);
   assert.ok(result.right > result.left);
+});
+
+test("mapClusterBoundsToPdf: address path overrides misleading px region", () => {
+  const sheet: SheetStructure = {
+    name: "S",
+    index: 0,
+    rowCount: 2,
+    colCount: 2,
+    rowHeights: [10, 10],
+    colWidths: [10, 10],
+    totalWidth: 20,
+    totalHeight: 20,
+    cells: [
+      {
+        address: "B2",
+        row: 1,
+        col: 1,
+        value: "x",
+        isMerged: false,
+        region: { top: 10, bottom: 20, left: 10, right: 20 },
+        style: {},
+      },
+    ],
+    pageSetup: { orientation: "portrait", paperSize: "A4", margins: { top: 10, bottom: 10, left: 10, right: 10 } },
+  };
+  const pm = makePrintMeta({
+    zoom: 100,
+    usedRange: { startRow: 1, startCol: 1, endRow: 2, endCol: 2, top: 0, left: 0, width: 100, height: 100 },
+    rows: [
+      { row: 1, height: 50, top: 0 },
+      { row: 2, height: 50, top: 50 },
+    ],
+    columns: [
+      { col: 1, width: 40, left: 0 },
+      { col: 2, width: 60, left: 40 },
+    ],
+  });
+  const garbage = { top: 0, bottom: 5, left: 0, right: 5 };
+  const viaPx = mapClusterRegionToPdf(garbage, sheet, pm);
+  const viaAddr = mapClusterBoundsToPdf(garbage, "B2", sheet, pm);
+  assert.ok(viaPx && viaAddr);
+  assert.notEqual(
+    viaAddr.top,
+    viaPx.top,
+    "printMeta 直参照の top は px 補間と異なること"
+  );
 });

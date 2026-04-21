@@ -2,7 +2,7 @@ import type { AnalysisResult, CarbonCopyTarget, ClusterDefinition, NetworkDefini
 import { TYPE_NUM_TO_STRING } from "./conmas-cluster-types";
 import { buildMergedDefinitionExcelBase64 } from "./excel-definition-export";
 import { isXlsxZipBuffer } from "./excel-comment-writer";
-import { mapClusterRegionToPdf } from "./print-coord-mapper";
+import { mapClusterBoundsToPdf } from "./print-coord-mapper";
 import { resolveClusterXmlIds } from "./network-utils";
 
 /**
@@ -480,7 +480,7 @@ function genCluster(c: ClusterDefinition, id: number, sheet: SheetStructure, all
   let top: number, bottom: number, left: number, right: number;
 
   if (sheet.printMeta) {
-    const mapped = mapClusterRegionToPdf(c.region, sheet, sheet.printMeta);
+    const mapped = mapClusterBoundsToPdf(c.region, c.cellAddress, sheet, sheet.printMeta);
     if (mapped) {
       top = mapped.top;
       bottom = mapped.bottom;
